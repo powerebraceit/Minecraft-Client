@@ -19,6 +19,7 @@ public abstract class InputMixin extends ClientInput {
         if (client == null || mc.player == null || mc.gui.screen() != null) return;
         if (client.builder().controlsInput()) {
             var nav = client.builder().navigator;
+            nav.applyMovementLook();
             keyPresses = new Input(nav.forward(), false, false, false, nav.jump(), client.builder().requiresCrouch(), false);
             moveVector = new net.minecraft.world.phys.Vec2(0, nav.forward() ? 1 : 0);
             return;

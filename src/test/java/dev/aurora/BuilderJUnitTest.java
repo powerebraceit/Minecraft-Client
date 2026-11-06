@@ -19,6 +19,7 @@ public final class BuilderJUnitTest {
         BuildSession.Restock restockResult=BuildSession.Restock.PENDING;
         Runnable restockAction=()->{};
         java.util.function.Function<BuildPlan.Block,String> blocker=block->"";
+        java.util.function.ToDoubleFunction<BuildPlan.Block> priority=block->0;
         final Map<BuildPlan.Block,String> preparationErrors=new HashMap<>();
         final List<BuildPlan.Block> preparations=new ArrayList<>();
         final List<Map<String,Integer>> restockRequirements=new ArrayList<>();
@@ -28,6 +29,7 @@ public final class BuilderJUnitTest {
             return ready;
         }
         public String placementBlocker(BuildPlan.Block block) {return blocker.apply(block);}
+        public double placementPriority(BuildPlan.Block block) {return priority.applyAsDouble(block);}
         public boolean busyRestocking() {return busy;}
         public String worldIdentity() { return world; }
         public boolean placed(BuildPlan.Block b) { return placed.contains(b); }
@@ -164,4 +166,45 @@ public final class BuilderJUnitTest {
         assertEquals(BuildSession.State.RESTOCKING,session.state());assertTrue(driver.requests.isEmpty());
         driver.busy=false;session.tick(driver);assertEquals(List.of(block(0)),driver.requests);
     }
+    @Test void choosesTheNearestEligibleInventoryActionWithinTheCurrentLayer() {
+        var sortedFirst=new BuildPlan.Block(0,0,0,"minecraft:stone",1,"far stone");
+        var nearby=new BuildPlan.Block(8,0,0,"minecraft:stone",1,"near stone");
+        var driver=new Driver();driver.inventory.put("minecraft:stone",2);
+        driver.priority=action->action.equals(nearby)?1:64;
+        var session=new BuildSession(new BuildPlan(List.of(sortedFirst,nearby)));
+        assertTrue(session.start(driver));session.tick(driver);
+        assertEquals(List.of(nearby),driver.requests);
+        assertEquals(List.of(nearby),driver.preparations);
+        assertEquals(0,driver.restockRequests);
+    }
+    @Test void keepsTheChosenWalkingTargetWhenDistancesChangeUntilItsPlacementIsConfirmed() {
+        var original=new BuildPlan.Block(0,0,0,"minecraft:stone",1,"original target");
+        var alternative=new BuildPlan.Block(8,0,0,"minecraft:stone",1,"other target");
+        var driver=new Driver();driver.inventory.put("minecraft:stone",2);driver.ready=false;
+        driver.priority=action->action.equals(original)?1:64;
+        var session=new BuildSession(new BuildPlan(List.of(original,alternative)));
+        assertTrue(session.start(driver));session.tick(driver);
+        driver.priority=action->action.equals(alternative)?0:100;
+        for(int tick=0;tick<8;tick++)session.tick(driver);
+        assertTrue(driver.requests.isEmpty());
+        assertEquals(Collections.nCopies(9,original),driver.preparations);
+        driver.ready=true;session.tick(driver);
+        assertEquals(List.of(original),driver.requests);
+        session.tick(driver);assertEquals(List.of(original),driver.requests);
+        driver.placed.add(original);driver.inventory.put("minecraft:stone",1);session.tick(driver);
+        assertEquals(List.of(original,alternative),driver.requests);
+    }
+    @Test void nearerUpperLayerNeverOverridesAnUnfinishedLowerLayer() {
+        var lower=block(0);var upper=block(1);
+        var driver=new Driver();driver.inventory.put("minecraft:stone",2);driver.ready=false;
+        driver.priority=action->action.equals(upper)?0:10000;
+        var session=new BuildSession(new BuildPlan(List.of(upper,lower)));
+        assertTrue(session.start(driver));session.tick(driver);session.tick(driver);
+        assertEquals(List.of(lower,lower),driver.preparations);
+        driver.ready=true;session.tick(driver);session.tick(driver);
+        assertEquals(List.of(lower),driver.requests);
+        driver.placed.add(lower);session.tick(driver);
+        assertEquals(List.of(lower,upper),driver.requests);
+    }
+
 }

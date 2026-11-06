@@ -22,6 +22,7 @@ public final class BuildSession {
         default Restock restockFor(BuildPlan.Block next,Map<String,Integer> requirements) {return restock(requirements);}
         default boolean preparePlacement(BuildPlan.Block block) { return true; }
         void place(BuildPlan.Block block);
+        default double placementPriority(BuildPlan.Block block) {return 0;}
         default boolean busyRestocking() {return false;}
         default String placementBlocker(BuildPlan.Block block) {return "";}
         default boolean completionReady() {return true;}
@@ -29,7 +30,7 @@ public final class BuildSession {
     private final BuildPlan plan;
     private State state = State.IDLE;
     private String world, status = "Idle";
-    private BuildPlan.Block pending;
+    private BuildPlan.Block pending,preparing;
     private int pendingTicks;
     private final Map<BuildPlan.Block,String> deferred=new LinkedHashMap<>();
     public BuildSession(BuildPlan plan) { this.plan = plan; }
@@ -37,7 +38,7 @@ public final class BuildSession {
     public String status() { return status; }
 
     public boolean start(Driver driver) {
-        pending = null; pendingTicks = 0;deferred.clear();
+        pending = null;preparing=null; pendingTicks = 0;deferred.clear();
         var remaining = plan.remaining(driver::placed);
         if (remaining.isEmpty()) {world=driver.worldIdentity();state=driver.completionReady()?State.COMPLETE:State.BUILDING;status=state==State.COMPLETE?"Already built":"Checking final schematic states";return true;}
         var required = BuildPlan.materials(remaining);
@@ -52,7 +53,7 @@ public final class BuildSession {
         world = driver.worldIdentity(); state = State.BUILDING; status = "Materials verified"; return true;
     }
 
-    public void pause(String reason) { state = State.PAUSED; pending = null; status = reason; }
+    public void pause(String reason) { state = State.PAUSED; pending = null;preparing=null; status = reason; }
     public void tick(Driver driver) {
         if (state != State.BUILDING && state != State.RESTOCKING) return;
         if (!java.util.Objects.equals(world, driver.worldIdentity())) { pause("World changed; start again explicitly"); return; }
@@ -74,8 +75,11 @@ public final class BuildSession {
             if(reason.isBlank())eligible.add(block);else if(blocker.isBlank())blocker=reason;
         }
         var inventory=driver.inventory();
-        BuildPlan.Block next=eligible.stream().filter(b->!deferred.containsKey(b) && inventory.getOrDefault(b.item(),0)>=b.count()).findFirst().orElse(null);
+        BuildPlan.Block next=preparing;
+        if(next==null || !eligible.contains(next) || deferred.containsKey(next) || inventory.getOrDefault(next.item(),0)<next.count())
+            next=eligible.stream().filter(b->!deferred.containsKey(b) && inventory.getOrDefault(b.item(),0)>=b.count()).min(java.util.Comparator.comparingDouble(driver::placementPriority)).orElse(null);
         if(next==null) {
+            preparing=null;
             next=eligible.stream().filter(b->!deferred.containsKey(b) && inventory.getOrDefault(b.item(),0)<b.count()).findFirst().orElse(null);
             if(next!=null) {
                 state=State.RESTOCKING;status="Restocking part of layer "+layer;
@@ -85,14 +89,16 @@ public final class BuildSession {
             String reason=deferred.isEmpty()?blocker:deferred.values().iterator().next();
             pause("Layer "+layer+" blocked: "+(reason.isBlank()?"check support and recipe prerequisites":reason));return;
         }
+        preparing=next;
         state = State.BUILDING; status = "Building layer " + layer;
         try {
             if (!driver.preparePlacement(next)) { status = "Finding a placement for layer " + layer; return; }
         } catch (RuntimeException error) {
+            preparing=null;
             deferred.put(next,error.getMessage()==null?"Placement unavailable":error.getMessage());
             status="Trying another block in layer "+layer;return;
         }
-        pending = next; pendingTicks = 0;
+        pending = next;preparing=null; pendingTicks = 0;
         try { driver.place(next); }
         catch (RuntimeException error) { pause("Placement failed: " + error.getMessage()); }
     }

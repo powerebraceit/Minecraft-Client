@@ -1,6 +1,7 @@
 package dev.aurora.minecraft.builder;
 
 import java.util.*;
+import dev.aurora.core.builder.PlacementReach;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -28,15 +29,19 @@ public final class NativePlacement {
         }
         public boolean visible() {
             var mc=Minecraft.getInstance();
-            if(mc.player==null || mc.level==null)return false;
+            if(mc.player==null || mc.level==null || !mc.level.hasChunkAt(hit.getBlockPos()))return false;
             var eyes=mc.player.getEyePosition();
-            if(eyes.distanceToSqr(hit.getLocation())>mc.player.blockInteractionRange()*mc.player.blockInteractionRange())return false;
+            if(!PlacementReach.withinSquared(mc.player.blockInteractionRange(),eyes.distanceToSqr(hit.getLocation())))return false;
             var face=hit.getDirection();var end=hit.getLocation().add(-face.getStepX()*0.0001,-face.getStepY()*0.0001,-face.getStepZ()*0.0001);
             var current=mc.level.clip(new ClipContext(eyes,end,ClipContext.Block.OUTLINE,air?ClipContext.Fluid.SOURCE_ONLY:ClipContext.Fluid.NONE,mc.player));
-            return current.getType()==HitResult.Type.BLOCK && current.getBlockPos().equals(hit.getBlockPos()) && current.getDirection()==face;
+            return current.getType()==HitResult.Type.BLOCK && current.getBlockPos().equals(hit.getBlockPos()) && current.getDirection()==face
+                && PlacementReach.withinSquared(mc.player.blockInteractionRange(),eyes.distanceToSqr(current.getLocation()));
         }
         public void click() {
-            Minecraft mc=Minecraft.getInstance();aim();
+            Minecraft mc=Minecraft.getInstance();
+            if(mc.player==null || mc.level==null || mc.gameMode==null)throw new IllegalStateException("Join a world before placing blocks");
+            aim();
+            if(!visible())throw new IllegalStateException("Placement surface is outside normal reach or no longer visible");
             if(air)mc.gameMode.useItem(mc.player,InteractionHand.MAIN_HAND);
             else mc.gameMode.useItemOn(mc.player,InteractionHand.MAIN_HAND,hit);
         }
@@ -49,7 +54,9 @@ public final class NativePlacement {
         return find(target,new PlacementRecipes.Step(desired.getBlock().asItem(),desired,PlacementRecipes.Kind.PLACE,0));
     }
     public static Attempt find(BlockPos target,PlacementRecipes.Step step) {
-        Minecraft mc=Minecraft.getInstance();var player=mc.player;var stack=player.getMainHandItem();
+        Minecraft mc=Minecraft.getInstance();var player=mc.player;
+        if(player==null || mc.level==null || !mc.level.hasChunkAt(target))throw new IllegalStateException("Placement target is not loaded");
+        var stack=player.getMainHandItem();
         if(!(stack.getItem() instanceof BlockItem item))throw new IllegalStateException("Selected item is not placeable");
         float oldYaw=player.getYRot(),oldPitch=player.getXRot();boolean oldShift=player.isShiftKeyDown();
         Set<String> predictions=new HashSet<>();
@@ -82,7 +89,7 @@ public final class NativePlacement {
         var mc=Minecraft.getInstance();var player=mc.player;
         if(player==null || mc.level==null || !mc.level.hasChunkAt(target))return false;
         if(step.kind()==PlacementRecipes.Kind.BUCKET)return BucketActions.visibleFrom(target,false,step.state().hasProperty(BlockStateProperties.WATERLOGGED),feet);
-        double reach=player.blockInteractionRange();
+        double reach=PlacementReach.limit(player.blockInteractionRange());
         if(feet.distanceToSqr(Vec3.atCenterOf(target))>(reach+2)*(reach+2))return false;
         if(step.kind()==PlacementRecipes.Kind.PLACE) {
             double halfWidth=player.getBbWidth()/2.0;
@@ -156,11 +163,12 @@ public final class NativePlacement {
     }
     private static BlockHitResult ray(Vec3 eyes,Surface surface,ClipContext.Fluid fluid) {
         var mc=Minecraft.getInstance();var player=mc.player;
-        if(eyes.distanceToSqr(surface.point())>player.blockInteractionRange()*player.blockInteractionRange())return null;
+        if(!mc.level.hasChunkAt(surface.pos()) || !PlacementReach.withinSquared(player.blockInteractionRange(),eyes.distanceToSqr(surface.point())))return null;
         var face=surface.face();
         Vec3 end=surface.point().add(-face.getStepX()*0.0001,-face.getStepY()*0.0001,-face.getStepZ()*0.0001);
         var hit=mc.level.clip(new ClipContext(eyes,end,ClipContext.Block.OUTLINE,fluid,player));
-        if(hit.getType()!=HitResult.Type.BLOCK || !hit.getBlockPos().equals(surface.pos()) || hit.getDirection()!=face)return null;
+        if(hit.getType()!=HitResult.Type.BLOCK || !hit.getBlockPos().equals(surface.pos()) || hit.getDirection()!=face
+            || !PlacementReach.withinSquared(player.blockInteractionRange(),eyes.distanceToSqr(hit.getLocation())))return null;
         return hit;
     }
     private static float yaw(Vec3 delta) {return (float)Math.toDegrees(Math.atan2(-delta.x,delta.z));}

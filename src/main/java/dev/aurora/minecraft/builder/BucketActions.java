@@ -1,6 +1,7 @@
 package dev.aurora.minecraft.builder;
 
 import java.util.*;
+import dev.aurora.core.builder.PlacementReach;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.*;
 import net.minecraft.world.InteractionHand;
@@ -50,26 +51,35 @@ public final class BucketActions {
         }
         throw new IllegalStateException("Required bucket is missing: "+item);
     }
-    public record Aim(float yaw,float pitch) {
+    public record Aim(float yaw,float pitch,BlockPos target,boolean pickup,boolean waterlog) {
+        public Aim(float yaw,float pitch) {this(yaw,pitch,null,false,false);}
+        public Aim {if(target!=null)target=target.immutable();}
         public void aim() {var p=Minecraft.getInstance().player;p.setYRot(yaw);p.setXRot(pitch);}
-        public void use() {aim();var mc=Minecraft.getInstance();mc.gameMode.useItem(mc.player,InteractionHand.MAIN_HAND);}
+        public void use() {
+            if(target==null)throw new IllegalStateException("A validated bucket target is required");
+            // Recompute from the current eyes immediately before use. No stale aim can send a long-range click.
+            Aim current=find(target,pickup,waterlog);current.aim();
+            var mc=Minecraft.getInstance();mc.gameMode.useItem(mc.player,InteractionHand.MAIN_HAND);
+        }
     }
     public static Aim find(BlockPos target,boolean pickup) {return find(target,pickup,false);}
     public static Aim find(BlockPos target,boolean pickup,boolean waterlog) {
-        var mc=Minecraft.getInstance();var player=mc.player;var stack=player.getMainHandItem();
+        var mc=Minecraft.getInstance();var player=mc.player;
+        if(player==null || mc.level==null || mc.gameMode==null || !mc.level.hasChunkAt(target))throw new IllegalStateException("Bucket target is not loaded");
+        var stack=player.getMainHandItem();
         if(!(stack.getItem() instanceof BucketItem))throw new IllegalStateException("Select a bucket first");
         if(!pickup && stack.is(Items.WATER_BUCKET) && mc.level.environmentAttributes().getValue(EnvironmentAttributes.WATER_EVAPORATES,target))
             throw new IllegalStateException("Water evaporates here; move the build and water pool to another dimension");
         if(pickup && !mc.level.getFluidState(target).isSource())throw new IllegalStateException("Water pool is not a source yet");
         Vec3 direction=bucketRay(target,pickup,waterlog,player.getEyePosition());
         if(direction==null)throw new IllegalStateException("No reachable bucket ray reaches "+target.toShortString());
-        return new Aim((float)Math.toDegrees(Math.atan2(-direction.x,direction.z)),(float)-Math.toDegrees(Math.atan2(direction.y,Math.hypot(direction.x,direction.z))));
+        return new Aim((float)Math.toDegrees(Math.atan2(-direction.x,direction.z)),(float)-Math.toDegrees(Math.atan2(direction.y,Math.hypot(direction.x,direction.z))),target,pickup,waterlog);
     }
     /** Uses precisely the same points, native fluid clipping and target prediction as actual bucket use. */
     public static boolean visibleFrom(BlockPos target,boolean pickup,boolean waterlog,Vec3 feet) {
         var mc=Minecraft.getInstance();
-        if(mc.player==null || mc.level==null || !(mc.player.getMainHandItem().getItem() instanceof BucketItem))return false;
-        double reach=mc.player.blockInteractionRange();
+        if(mc.player==null || mc.level==null || !mc.level.hasChunkAt(target) || !(mc.player.getMainHandItem().getItem() instanceof BucketItem))return false;
+        double reach=PlacementReach.limit(mc.player.blockInteractionRange());
         if(feet.distanceToSqr(Vec3.atCenterOf(target))>(reach+2)*(reach+2))return false;
         if(pickup && !mc.level.getFluidState(target).isSource())return false;
         return bucketRay(target,pickup,waterlog,feet.add(0,mc.player.getEyeHeight(net.minecraft.world.entity.Pose.STANDING),0))!=null;
@@ -77,13 +87,13 @@ public final class BucketActions {
     private static Vec3 bucketRay(BlockPos target,boolean pickup,boolean waterlog,Vec3 eyes) {
         var mc=Minecraft.getInstance();var player=mc.player;var stack=player.getMainHandItem();
         if(!(stack.getItem() instanceof BucketItem bucket))return null;
-        double reach=player.blockInteractionRange();
+        double reach=PlacementReach.limit(player.blockInteractionRange());
         for(var point:points(target,pickup,waterlog)) {
             Vec3 delta=point.subtract(eyes);
-            if(delta.lengthSqr()>reach*reach || delta.lengthSqr()<0.000001)continue;
+            if(!PlacementReach.withinSquared(player.blockInteractionRange(),delta.lengthSqr()) || delta.lengthSqr()<0.000001)continue;
             Vec3 end=eyes.add(delta.normalize().scale(reach));
             var hit=mc.level.clip(new ClipContext(eyes,end,ClipContext.Block.OUTLINE,bucket.getFluidContext(),player));
-            if(hit.getType()!=HitResult.Type.BLOCK)continue;
+            if(hit.getType()!=HitResult.Type.BLOCK || !mc.level.hasChunkAt(hit.getBlockPos()) || !PlacementReach.withinSquared(player.blockInteractionRange(),eyes.distanceToSqr(hit.getLocation())))continue;
             boolean container=mc.level.getBlockState(hit.getBlockPos()).getBlock() instanceof LiquidBlockContainer;
             BlockPos predicted=pickup || stack.is(Items.WATER_BUCKET) && container?hit.getBlockPos():hit.getBlockPos().relative(hit.getDirection());
             if(!predicted.equals(target) || !pickup && container!=waterlog)continue;

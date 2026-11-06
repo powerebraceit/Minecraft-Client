@@ -36,7 +36,10 @@ public final class BuilderRuntime implements BuildSession.Driver {
     private BuildPlan.Block activeBlock;
     private final Set<BlockPos> rejectedViews=new HashSet<>();
     public boolean requiresCrouch() {return attempt!=null && attempt.crouch() && !restock.busy() && !water.busy();}
-    private int finalCheckTicks;
+    private int finalCheckTicks,clientTicks,lastPlacementTick=-4,placementClicks;
+    private double maxPlacementDistance;
+    public int placementClicks() {return placementClicks;}
+    public double maxPlacementDistance() {return maxPlacementDistance;}
     public String schematicName() {return document==null?"Choose a .litematic file":document.name();}
     public DirectSchematic document() {return document;}
     public BlockPos anchor() {return anchor;}
@@ -94,7 +97,7 @@ public final class BuilderRuntime implements BuildSession.Driver {
     }
     /** Also accepts an explicit immutable snapshot for the development integration runner. */
     public void startSnapshot(DirectSchematic.Snapshot plan) {
-        stop("Preparing build");snapshot=plan;level=Minecraft.getInstance().level;
+        stop("Preparing build");placementClicks=0;maxPlacementDistance=0;lastPlacementTick=clientTicks-4;snapshot=plan;level=Minecraft.getInstance().level;
         session=new BuildSession(plan.plan());moveTicks=0;
         var remaining=plan.plan().remaining(this::placed);
         water.configure(plan,remaining.stream().filter(b->b.item().equals("minecraft:water_bucket")).count());
@@ -108,6 +111,7 @@ public final class BuilderRuntime implements BuildSession.Driver {
         if(session!=null)session.pause(reason);message=reason;
     }
     public void tick() {
+        clientTicks++;
         Minecraft mc=Minecraft.getInstance();
         if(mc.player==null || mc.level==null)return;
         chests.outlines();water.outlines();
@@ -163,6 +167,15 @@ public final class BuilderRuntime implements BuildSession.Driver {
         boolean enough=snapshot!=null && BuildPlan.missing(BuildPlan.materials(snapshot.plan().remaining(this::placed)),own).isEmpty();
         return new BuildSession.Stock(items,stock.inspected() || enough);
     }
+    @Override public double placementPriority(BuildPlan.Block block) {
+        var mc=Minecraft.getInstance();var pos=new BlockPos(block.x(),block.y(),block.z());
+        double distance=mc.player.getEyePosition().distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(pos));
+        // A target intersecting our own body needs a move; finish nearby unobstructed targets first.
+        var step=snapshot.recipes().get(pos).steps().get(block.stage());
+        if(step.kind()==PlacementRecipes.Kind.PLACE)for(var box:step.state().getCollisionShape(mc.level,pos).toAabbs())
+            if(box.move(pos).intersects(mc.player.getBoundingBox()))return distance+1000;
+        return distance;
+    }
     @Override public boolean busyRestocking() {return restock.busy() || water.busy();}
     @Override public String placementBlocker(BuildPlan.Block block) {
         var mc=Minecraft.getInstance();var pos=new BlockPos(block.x(),block.y(),block.z());var recipe=snapshot.recipes().get(pos);
@@ -206,6 +219,7 @@ public final class BuilderRuntime implements BuildSession.Driver {
         if(!block.equals(activeBlock)) {
             activeBlock=block;rejectedViews.clear();moveTicks=0;navigator.stop();attempt=null;bucketAim=null;aimedTarget=null;
         }
+        if(clientTicks-lastPlacementTick<4)return false;
         if(++moveTicks>1200)throw new IllegalStateException("Could not reach the next block within 60 seconds");
         BlockPos target=new BlockPos(block.x(),block.y(),block.z());
         if(!mc.level.hasChunkAt(target))throw new IllegalStateException("Target chunk is not loaded");
@@ -224,9 +238,9 @@ public final class BuilderRuntime implements BuildSession.Driver {
             bucketAim.aim();if(aimTicks-->0)return false;
             bucketAim=BucketActions.find(target,false,expected.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED));
         }else {
-            if(!target.equals(aimedTarget) || attempt==null) {attempt=findAttempt(target,step);aimedTarget=target;aimTicks=2;}
+            if(!target.equals(aimedTarget) || attempt==null) {attempt=findAttempt(target,step);aimedTarget=target;aimTicks=aimDelay(attempt,step);}
             attempt.aim();if(aimTicks-->0)return false;
-            if(!attempt.visible()) {attempt=findAttempt(target,step);aimTicks=2;return false;}
+            if(!attempt.visible()) {attempt=findAttempt(target,step);aimTicks=aimDelay(attempt,step);return false;}
         }
         }catch(IllegalStateException error) {
             rejectedViews.add(mc.player.blockPosition().immutable());
@@ -234,6 +248,11 @@ public final class BuilderRuntime implements BuildSession.Driver {
             navigator.stop();attempt=null;bucketAim=null;aimedTarget=null;return false;
         }
         moveTicks=0;return true;
+    }
+    private int aimDelay(NativePlacement.Attempt candidate,PlacementRecipes.Step step) {
+        if(candidate.crouch())return 2;
+        if(candidate.air())return 1;
+        return step.state().getProperties().stream().anyMatch(p->p.getName().equals("facing") || p.getName().equals("rotation"))?1:0;
     }
     private NativePlacement.Attempt findAttempt(BlockPos target,PlacementRecipes.Step step) {
         return step.kind()==PlacementRecipes.Kind.INTERACT?NativePlacement.interact(target):step.kind()==PlacementRecipes.Kind.AIR_USE?NativePlacement.airUse(target,step):NativePlacement.find(target,step);
@@ -248,7 +267,12 @@ public final class BuilderRuntime implements BuildSession.Driver {
         for(BlockPos companion:snapshot.companions().getOrDefault(target,List.of())) {awaiting.add(companion);confirmations.remove(companion);}
         if(snapshot.recipes().get(target).steps().get(block.stage()).kind()==PlacementRecipes.Kind.BUCKET) {
             if(bucketAim==null)throw new IllegalStateException("No validated bucket ray");bucketAim.use();bucketAim=null;
-        }else {if(attempt==null)throw new IllegalStateException("No validated placement context");attempt.click();attempt=null;}
+        }else {
+            if(attempt==null)throw new IllegalStateException("No validated placement context");
+            double distance=mc.player.getEyePosition().distanceTo(attempt.hit().getLocation());
+            attempt.click();maxPlacementDistance=Math.max(maxPlacementDistance,distance);attempt=null;
+        }
+        placementClicks++;lastPlacementTick=clientTicks;
         aimedTarget=null;activeBlock=null;rejectedViews.clear();
     }
     public void drawStatus(GuiGraphicsExtractor graphics) {

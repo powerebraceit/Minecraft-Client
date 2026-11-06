@@ -5,7 +5,7 @@ lila accenter, fem modulkategorier och sökning över alla kategorier.
 
 ## Ladda ner och installera
 
-1. [Ladda ner aurora-client-1.8.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.8.0/releases/1.8.0/aurora-client-1.8.0.jar).
+1. [Ladda ner aurora-client-1.9.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.9.0/releases/1.9.0/aurora-client-1.9.0.jar).
 2. Installera [Fabric Loader](https://fabricmc.net/use/installer/) **0.20.1 eller senare** för **Minecraft 26.3**.
 3. Lägg JAR-filen i `mods`-mappen för den Minecraft-instans du använder.
    I en vanlig Windows-installation är det `%APPDATA%\.minecraft\mods`.
@@ -54,6 +54,14 @@ till dina fötter. **V** registrerar kistan du tittar på som restock-kista. Bå
 tangenterna och kistmarkeringens färg kan ändras i modulens inställningar.
 Starta bygget först när previewn står rätt. Bygget kräver allt återstående
 material i ditt inventory eller registrerade kistor och arbetar lager för lager.
+
+**Byggtempo och räckvidd i 1.9.0:** byggaren väljer närliggande block inom
+samma lager, behåller målet under gång och stannar när en giltig placering finns.
+Gångriktningen hålls skild från siktesrotationen. Vanliga block kan placeras utan
+extra siktesväntan, med högst ett klick var fjärde speltick, cirka fem block per
+sekund när material, sikt och serverbekräftelser tillåter det. Räckvidden är högst
+**4,5 block från ögat till klickytan**, även om en annan mod höjer attributet.
+Både block- och hinkklick kontrolleras igen precis före användning.
 
 **Lager och inventory i 1.8.0:** hela lagret behöver inte få plats samtidigt.
 Byggaren använder tillgängligt material först, hämtar en mängd som ryms och
@@ -178,7 +186,7 @@ spel- och resursservrar. Gradle-versionen är låst i wrappern och verifieras me
 ```
 
 På Windows: `gradlew.bat build`. Installationsfilen skapas i
-`build/libs/aurora-client-1.8.0.jar`; filen med `-sources` är källkod.
+`build/libs/aurora-client-1.9.0.jar`; filen med `-sources` är källkod.
 
 ```bash
 ./gradlew runClient     # interaktiv utvecklingsklient
@@ -201,7 +209,7 @@ sparade HUD-positioner, vanlig chattinmatning och ändrad GUI-skala.
 Testet sparar skärmbilder och en resultatfil; Gradle misslyckas om kontrollerna inte slutförs.
 
 Bygget kör även 34 grundkontroller, sex tester för HUD-positioner, två tester för modulinställningar,
-14 tester för byggplanering, tre tester för gångvägar, sju tester för `.litematic`-läsaren, sex tester för preview/materialantal och sju vätsketester via JUnit.
+17 tester för byggplanering, tre tester för gångvägar, sju tester för `.litematic`-läsaren, sex tester för preview/materialantal och sju vätsketester via JUnit.
 Speltestet verifierar dessutom filval, avbruten filväljare, texturerad preview,
 röda/gula ramar, döljning av rätt placerade block, återvisning efter borttagning,
 materiallistor, flyttning av material-HUD och G-ankring. Bildkontroller jämför
@@ -215,7 +223,10 @@ Ett regressionstest bygger också ett lager med **70 sten + 2 glas** vid negativ
 koordinater, med **35 fulla stackar andra föremål och bara en användbar plats**.
 Det kontrollerar flera kistturer, lagergränser, en väggfacklas stöd och placering
 ovanpå en kista. Separata tester täcker portionshämtning, receptordning och stopp
-när stöd saknas.
+när stöd saknas. Ett tempo- och räckviddstest bygger tolv synliga block från samma
+plats och kontrollerar en rak gångväg till ett block åtta block bort. I det senare
+fallet höjs testspelarens attribut till åtta; faktiska klick måste fortfarande
+hålla sig inom 4,5 block.
 Speltestet har körts
 lokalt på Minecraft **26.3**, Fabric Loader **0.20.1**, Java **25** och Linux med
 Mesa-mjukvarurendering. Windows, andra modpaket och inloggad multiplayer har inte

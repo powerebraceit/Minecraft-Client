@@ -128,6 +128,25 @@ Både blockmodellen och vattnet visas i deras genomskinliga preview.
 - Saknade material, full inventory utan användbara byggföremål eller ledigt utrymme, konfliktblock, världsbyte, död eller en
   misslyckad placering ger stopp/paus. En ny start gör om materialkontrollen.
 
+## Byggtempo och normal räckvidd i 1.9.0
+
+Tillgängliga, närliggande block inom det aktuella lagret väljs först. När en gång
+eller siktning har börjat behålls det valda målet så att byggaren inte byter håll
+när avstånden ändras. Gångens riktning återställs före rörelseinput; siktning mot
+ett block kan inte styra nästa gångsteg åt ett annat håll.
+
+Finns en giltig placeringsyta från spelarens nuvarande plats börjar ingen
+sökning efter en annan plats. Gångsökningen använder en kortaste väg inom en
+begränsad korridor nära målet och undviker tomma vänteticks mellan delmål.
+Block med riktningsberoende state väntar in rotationen; sneak väntar in input.
+Vanliga block får ingen sådan extra siktesväntan. Högst ett byggklick skickas var
+fjärde tick, motsvarande cirka fem block per sekund vid 20 TPS. Serverbekräftelse,
+gång, materialbyten, restock och komplicerade former kan ge lägre faktisk takt.
+
+Räckvidden är **min(4,5 block, spelarens räckviddsattribut)**, mätt från ögat till
+den verkliga klickytan. Ett högre attribut från en annan mod utökar inte byggarens
+räckvidd. Block och hinkar måste vara inom räckvidd och synliga vid själva klicket.
+
 ## Flerstegsblock och registerstöd i 1.7.0
 
 - Alla registrerade krukväxter använder **blomkruka + växt**. En redan placerad
@@ -226,3 +245,18 @@ första lagret bekräftats. En väggfackla måste vänta på sitt stöd, och ett
 placeras ovanpå en kista med sneak. Ett negativt fall med saknat stöd måste
 pausa och lämna nästa lager orört. Det ursprungliga schemat bakom en
 användarskärmbild finns inte i repot; testerna återskapar dessa felklasser.
+
+
+Tempo- och räckviddstestet placerar tolv block från en enda upphöjd plats utan
+att flytta spelaren, med fyra ticks mellan klicken. Ett andra fall börjar åtta
+block från målet och mäter rak gång, total gångsträcka och faktisk klickräckvidd.
+Även med testattributet åtta måste spelaren gå fram och hålla klicket inom 4,5.
+Gränsvärden, lägre attribut, diagonal räckvidd, val av närliggande mål och ett
+stabilt gångmål täcks av separata enhetstester.
+
+
+Mätt i den lokala 1.9.0-körningen: **12 block på 46 ticks (2,3 sekunder)** utan
+gång. Målet åtta block bort nåddes på en rak **3,86 blocks gångväg**, med faktisk
+klickräckvidd **4,494 block**, trots räckviddsattributet åtta. Hela speltestet och
+**73 enhetstester** passerade. Dessa siffror gäller testfallen på den lokala
+servern; restock, terräng och serverfördröjning påverkar andra byggen.

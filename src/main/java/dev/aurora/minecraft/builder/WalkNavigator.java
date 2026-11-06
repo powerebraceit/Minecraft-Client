@@ -16,8 +16,12 @@ public final class WalkNavigator {
     private Vec3 last;
     private boolean forward,jump,placement;
     private double goalRange,goalMinimum;
+    private float movementYaw;
     public boolean forward() {return forward;}
     public boolean jump() {return jump;}
+    public float movementYaw() {return movementYaw;}
+    /** Input applies this immediately before movement; placement camera changes cannot redirect walking. */
+    public void applyMovementLook() {if(forward && Minecraft.getInstance().player!=null)Minecraft.getInstance().player.setYRot(movementYaw);}
     public void stop() {target=null;path=List.of();index=0;forward=false;jump=false;stuckTicks=0;last=null;}
     public boolean walkTo(BlockPos destination,double range) {return walkTo(destination,range,0);}
     public boolean walkTo(BlockPos destination,double range,double minimumRange) {
@@ -36,30 +40,39 @@ public final class WalkNavigator {
         if(mc.player==null || mc.level==null) {stop();return false;}
         if(mc.gui.screen()!=null) {forward=false;jump=false;return false;}
         var actual=mc.player.position();
-        if(walkable(point(mc.player.blockPosition())) && goal.test(actual)) {stop();return true;}
+        if((placement || walkable(point(mc.player.blockPosition()))) && goal.test(actual)) {stop();return true;}
         if(target!=null && target.equals(destination) && !path.isEmpty()) {
             var endpoint=path.getLast();
-            if(!walkable(endpoint) || !goal.test(feet(endpoint)))stop();
+            if(!walkable(endpoint))stop();
         }
         if(!destination.equals(target)) {
             stop();target=destination.immutable();
             var from=mc.player.blockPosition();
-            path=WalkPath.find(point(from),this::walkable,this::clear,p->walkable(p) && goal.test(feet(p)),8192);
+            path=placement
+                ?WalkPath.findToward(point(from),this::walkable,this::clear,p->walkable(p) && goal.test(feet(p)),2048,point(destination),4)
+                :WalkPath.find(point(from),this::walkable,this::clear,p->walkable(p) && goal.test(feet(p)),8192);
         }
         if(index>=path.size()) {
             stop();
             // A depleted/empty route is not proof that a radius or visible placement goal was reached.
             return walkable(point(mc.player.blockPosition())) && goal.test(mc.player.position());
         }
+        // Consume intermediate waypoints in this tick instead of inserting one idle tick per block.
+        while(index<path.size()-1 && actual.distanceTo(feet(path.get(index)))<0.3)index++;
         var next=path.get(index);
         if(!walkable(next)) {stop();throw new IllegalStateException("Terrain changed; recompute the walking route");}
         Vec3 center=feet(next);
-        if(actual.distanceTo(center)<0.3) {index++;forward=false;return false;}
+        if(index==path.size()-1 && actual.distanceTo(center)<0.12) {
+            stop();
+            if(goal.test(actual))return true;
+            throw new IllegalStateException("The planned walking position no longer satisfies the placement goal");
+        }
         if(last!=null && actual.distanceTo(last)<0.015)stuckTicks++;else stuckTicks=0;
         last=actual;
         if(stuckTicks>60) {stop();throw new IllegalStateException("Walking route is blocked");}
         Vec3 delta=center.subtract(actual);
-        mc.player.setYRot((float)Math.toDegrees(Math.atan2(-delta.x,delta.z)));
+        movementYaw=(float)Math.toDegrees(Math.atan2(-delta.x,delta.z));
+        mc.player.setYRot(movementYaw);
         forward=true;jump=center.y>mc.player.getY()+0.35;
         return false;
     }
