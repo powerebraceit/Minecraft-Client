@@ -24,7 +24,14 @@ public final class PlacementRecipes {
             for(int i=steps.size()-1;i>=0;i--)if(steps.get(i).matches(actual))return i;
             return -1;
         }
-        public boolean done(int stage,BlockState actual) {return progress(actual)>=stage;}
+        public boolean done(int stage,BlockState actual) {
+            var step=steps.get(stage);
+            if(step.kind()==Kind.BUCKET && step.state().hasProperty(BlockStateProperties.WATERLOGGED) && actual!=null) {
+                if(actual.is(Blocks.WATER) && actual.getFluidState().isSource())return true;
+                if(actual.getBlock()==desired.getBlock() && actual.hasProperty(BlockStateProperties.WATERLOGGED) && actual.getValue(BlockStateProperties.WATERLOGGED))return true;
+            }
+            return progress(actual)>=stage;
+        }
         public boolean canContinue(int stage,BlockState actual) {return stage>0 && progress(actual)==stage-1;}
     }
     private PlacementRecipes() { }
@@ -71,7 +78,15 @@ public final class PlacementRecipes {
             }
         }
         if(lit && !wet)steps.add(new Step(Items.FIRE_CHARGE,dry.setValue(BlockStateProperties.LIT,true),Kind.INTERACT,0));
-        if(wet)steps.add(new Step(Items.WATER_BUCKET,desired,Kind.BUCKET,1));
+        if(wet) {
+            for(int i=0;i<steps.size();i++) {
+                var step=steps.get(i);if(!step.state().hasProperty(BlockStateProperties.WATERLOGGED))continue;
+                var alternatives=new ArrayList<>(step.alternatives());alternatives.add(step.state().setValue(BlockStateProperties.WATERLOGGED,true));
+                for(var alternative:step.alternatives())alternatives.add(alternative.setValue(BlockStateProperties.WATERLOGGED,true));
+                steps.set(i,new Step(step.item(),step.state(),step.kind(),step.phase(),alternatives));
+            }
+            steps.add(new Step(Items.WATER_BUCKET,desired,Kind.BUCKET,1));
+        }
         return new Recipe(desired,steps,lit && wet?"Waterlogged candles cannot stay lit":"");
     }
     private static IntegerProperty amount(BlockState state) {
@@ -84,7 +99,7 @@ public final class PlacementRecipes {
         return null;
     }
     /** These properties are recomputed by neighbors, redstone or growth after placement. Final validation stays exact. */
-    private static final Set<String> DERIVED=Set.of("age","stage","distance","persistent","powered","power","north","south","east","west","up","down","shape","type","instrument","note","occupied");
+    private static final Set<String> DERIVED=Set.of("age","stage","distance","persistent","powered","power","north","south","east","west","up","down","shape","type","instrument","note","occupied","snowy");
     public static boolean equivalent(BlockState actual,BlockState expected) {
         if(actual==expected)return true;
         if(actual==null || actual.getBlock()!=expected.getBlock())return false;

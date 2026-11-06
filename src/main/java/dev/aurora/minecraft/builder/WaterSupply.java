@@ -113,7 +113,10 @@ public final class WaterSupply {
             }else if(phase==Phase.WAIT_SEED) {
                 var confirmed=confirmations.get(target);
                 if(confirmed!=null && SchematicFluids.source(confirmed) && buckets.observed("minecraft:bucket",inventoryAfter)) {seed++;phase=Phase.SEED;aim=null;}
-                else if(++ticks>160)throw new IllegalStateException("Water seed placement or bucket conversion was not confirmed by the server");
+                else if(++ticks>160) {
+                    AuroraClient.LOG.warn("Seed confirmation failed target={} actual={} confirmed={} inventoryObserved={} inventory={} player={}",target,mc.level.getBlockState(target),confirmed,buckets.observed("minecraft:bucket",inventoryAfter),RestockJob.inventory(),mc.player.position());
+                    throw new IllegalStateException("Water seed placement or bucket conversion was not confirmed by the server");
+                }
             }else if(phase==Phase.WAIT_POOL) {
                 status="Waiting for four regenerating water sources";
                 if(WaterPool.ready(mc.level,pool)) {ready=true;phase=Phase.IDLE;navigator.stop();}
@@ -133,7 +136,9 @@ public final class WaterSupply {
     private boolean use(String item,boolean pickup) {
         if(!navigator.walkTo(target,2.8,1.8))return false;
         if(!buckets.select(item))return false;
-        if(aim==null) {aim=BucketActions.find(target,pickup);aimTicks=2;}
+        if(!Minecraft.getInstance().player.onGround() || Minecraft.getInstance().player.getDeltaMovement().horizontalDistanceSqr()>0.0025)return false;
+        if(aim==null)aimTicks=2;
+        aim=BucketActions.find(target,pickup);
         aim.aim();if(aimTicks-->0)return false;
         confirmations.remove(target);inventoryAfter=buckets.serial();aim.use();return true;
     }

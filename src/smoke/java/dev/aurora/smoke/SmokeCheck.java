@@ -59,7 +59,7 @@ public final class SmokeCheck {
         Minecraft mc = Minecraft.getInstance();
         ticks++;
         try {
-            if (ticks > 4800) throw new AssertionError("Timed out in stage " + stage);
+            if (ticks > 7200) throw new AssertionError("Timed out in stage " + stage);
             if (mc.gui.screen() instanceof AccessibilityOnboardingScreen screen) { screen.onClose(); return; }
             AuroraClient client = AuroraClient.instance();
             if (stage == 0 && mc.gui.screen() instanceof TitleScreen && mc.gui.overlay() == null) {
@@ -348,7 +348,7 @@ public final class SmokeCheck {
                 stage=10;stageTick=ticks;
             } else if (stage == 10 && client.builder().state() == dev.aurora.core.builder.BuildSession.State.COMPLETE) {
                 check(fixtureBlocks.stream().allMatch(client.builder()::placed), "File-based survival placement is server-confirmed for both layers, stairs and double slab");
-                check(client.builder().inventory().getOrDefault("minecraft:stone", 0) == 6, "Restock transferred eight stone and survival placement consumed two");
+                check(client.builder().inventory().getOrDefault("minecraft:stone", 0) == 0, "Restock transferred exactly two requested stone and survival placement consumed both");
                 check(client.builder().inventory().getOrDefault("minecraft:oak_stairs",0)==0 && client.builder().inventory().getOrDefault("minecraft:stone_slab",0)==0, "Native placement consumes stair and both slab items");
                 capture("aurora-build.png");
                 client.modules().get("auto_builder").setEnabled(false);
@@ -422,8 +422,11 @@ public final class SmokeCheck {
                 check(client.builder().inventory().getOrDefault("minecraft:bucket",0)==1,"Waterlogging consumes water and returns its empty bucket");
                 stage=53;stageTick=ticks;
             } else if(stage==53 && ticks-stageTick>15) {
-                capture("aurora-compound-build.png");client.modules().get("auto_builder").setEnabled(false);client.builder().stop("Smoke test complete");
-                Files.writeString(RESULT,"PASS: Native Minecraft 26.3 survival UI, HUD, real file loading, textured preview, material counts, restock, stairs, double slabs, chain alias, water refill pool and lava tests passed. Compound recipes server-confirmed potted red mushroom, potted oak sapling, lit blue candle cake, four red candles, three snow layers, wall torch, waterlogged iron chain and lily pad. All final block states match, materials reach zero, and the water bucket is returned empty.\n");
+                capture("aurora-compound-build.png");client.modules().get("auto_builder").setEnabled(false);client.builder().stop("Compound tests complete");
+                LayerBuildCheck.start(mc,client);stage=60;stageTick=ticks;
+            } else if(stage==60 && LayerBuildCheck.tick(mc,client)) {
+                capture("aurora-layer-batches.png");
+                Files.writeString(RESULT,"PASS: Native Minecraft 26.3 survival UI, HUD, real file loading, textured preview, material counts, restock, stairs, double slabs, chain alias, water refill pool and lava tests passed. Compound recipes server-confirmed potted red mushroom, potted oak sapling, lit blue candle cake, four red candles, three snow layers, wall torch, waterlogged iron chain and lily pad. All final block states match, materials reach zero, and the water bucket is returned empty. A 72-block layer at negative coordinates was built with one available inventory slot via multiple bounded restock trips, followed by dependency-ordered upper blocks and placement on a chest.\n");
                 finished=true;AuroraClient.LOG.info("AURORA SMOKE COMPLETE: PASS");mc.stop();
             } else if(stage==52 && (client.builder().state()==dev.aurora.core.builder.BuildSession.State.PAUSED || client.builder().state()==dev.aurora.core.builder.BuildSession.State.MISSING_MATERIALS)) {
                 throw new AssertionError("Compound builder stopped: "+client.builder().status()+"; inventory="+client.builder().inventory());

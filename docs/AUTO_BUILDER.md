@@ -106,16 +106,26 @@ Både blockmodellen och vattnet visas i deras genomskinliga preview.
   registrerade kistor. Ingen blockplacering sker under materialinspektionen.
 - Klienten går till kistorna och väntar på serverns containerinnehåll. Den gissar
   inte innehållet från klientens block entities.
-- Saknat material för det aktuella lagret hämtas med vanliga inventory-klick.
-  Efter en stacköverföring stängs och öppnas kistan igen för att kontrollera
-  spelarens inventory mot serverns fullständiga synkronisering. Hela stackar kan
-  flyttas; överskott ligger kvar i inventory.
+- Material som redan finns i inventory används först inom det aktuella lagret.
+  Lagret behöver inte få plats samtidigt. Restock hämtar en exakt portion som
+  ryms i kompatibla stackar och lediga platser, med nästa byggmaterials behov först.
+  Sedan fortsätter bygget på samma lager och hämtar fler portioner vid behov.
+- Efter en överföring återförs överskott till kistan. Kistan stängs och öppnas igen
+  för att kontrollera den exakta ökningen mot serverns fullständiga synkronisering.
+  Ett ofullständigt men användbart parti räcker för att fortsätta bygga.
+- Om ett block saknar stöd eller fri placering provas andra block i samma lager.
+  Efter en bekräftad placering provas väntande block igen. Nästa steg i ett
+  flerstegsrecept får inte börja innan föregående steg bekräftats.
+- Gångsökningen söker fria placeringsytor från gångbara positioner, provar andra
+  positioner när ett placeringsläge nekas och tar hänsyn till spelarens kropp.
+  Blockens verkliga delytor används, inklusive tunna och sammansatta former.
+  Placering ovanpå/mot en kista sker med sneak; sneak släpps inför restock.
 - Ett lager slutförs före nästa. Serverns blockuppdateringar måste bekräfta både
   placeringen och rätt blockstate. Redan korrekt placerade block hoppas över.
 - Trappor orienteras med spelets vanliga placeringsregler. En dubbel slab kräver
   två föremål och två placeringsklick. Dörrars överdel och sängars huvud räknas
   som tillhörande block, inte som extra föremål.
-- Saknade material, full inventory, konfliktblock, världsbyte, död eller en
+- Saknade material, full inventory utan användbara byggföremål eller ledigt utrymme, konfliktblock, världsbyte, död eller en
   misslyckad placering ger stopp/paus. En ny start gör om materialkontrollen.
 
 ## Flerstegsblock och registerstöd i 1.7.0
@@ -206,3 +216,13 @@ manuella block. Survival-testet läser en riktig `.litematic` och bygger röd sv
 i kruka, ekplanta i kruka, tänd blå ljustårta, fyra röda ljus, tre snölager,
 väggfackla, vattenfylld järnkedja och näckrosblad. Det kräver serverbekräftade
 mellanresultat, exakta slutstates, noll återstående material och återlämnad tom hink.
+
+
+I 1.8.0 verifieras dessutom **72 block i samma lager med en enda användbar
+inventory-plats** (35 andra fulla stackar ligger kvar). Testet börjar vid
+`-384, -60, -628`, bygger först med medtaget material och hämtar sedan flera
+serverbekräftade portioner. Ingen placering på nästa lager får ske innan hela
+första lagret bekräftats. En väggfackla måste vänta på sitt stöd, och ett block
+placeras ovanpå en kista med sneak. Ett negativt fall med saknat stöd måste
+pausa och lämna nästa lager orört. Det ursprungliga schemat bakom en
+användarskärmbild finns inte i repot; testerna återskapar dessa felklasser.

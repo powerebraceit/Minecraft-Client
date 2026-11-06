@@ -56,6 +56,20 @@ class PlacementRecipesJUnitTest {
         assertEquals(List.of(0,1),snapshot.plan().blocks().stream().map(BuildPlan.Block::phase).toList());
         assertFalse(snapshot.recipes().get(BlockPos.ZERO).done(1,wet.setValue(BlockStateProperties.WATERLOGGED,false)));
     }
+    @Test void anExistingWaterSourceNeedsOnlyTheBlockItemAndPreservesWaterloggedProgress() {
+        var wet=Blocks.IRON_CHAIN.defaultBlockState().setValue(BlockStateProperties.WATERLOGGED,true);
+        var world=new SchematicPreviewJUnitTest.World();world.states.put(BlockPos.ZERO,Blocks.WATER.defaultBlockState());
+        var materials=new SchematicMaterials(doc(wet),BlockPos.ZERO);materials.tick(world);
+        assertEquals(1,materials.remainingItems());
+        var recipe=PlacementRecipes.describe(wet);assertTrue(recipe.steps().getFirst().matches(wet));
+        assertTrue(recipe.done(1,Blocks.WATER.defaultBlockState()));
+        world.states.put(BlockPos.ZERO,wet);materials.changed(BlockPos.ZERO,world);assertEquals(0,materials.remainingItems());
+        var pickles=Blocks.SEA_PICKLE.defaultBlockState().setValue(SeaPickleBlock.PICKLES,4).setValue(BlockStateProperties.WATERLOGGED,true);
+        recipe=PlacementRecipes.describe(pickles);
+        var partial=pickles.setValue(SeaPickleBlock.PICKLES,2);
+        assertTrue(recipe.done(0,partial));assertTrue(recipe.done(1,partial));assertFalse(recipe.done(2,partial));
+        assertTrue(recipe.done(4,partial));
+    }
     @Test void wallVariantsSeedsAndRedstoneUseTheRegisteredInventoryItem() {
         for(var block:List.of(Blocks.WALL_TORCH,Blocks.OAK_WALL_SIGN,Blocks.SKELETON_WALL_SKULL,Blocks.WHEAT,Blocks.REDSTONE_WIRE,Blocks.SWEET_BERRY_BUSH,Blocks.TRIPWIRE)) {
             var recipe=PlacementRecipes.describe(block.defaultBlockState());

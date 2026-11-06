@@ -5,7 +5,7 @@ lila accenter, fem modulkategorier och sökning över alla kategorier.
 
 ## Ladda ner och installera
 
-1. [Ladda ner aurora-client-1.7.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.7.0/releases/1.7.0/aurora-client-1.7.0.jar).
+1. [Ladda ner aurora-client-1.8.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.8.0/releases/1.8.0/aurora-client-1.8.0.jar).
 2. Installera [Fabric Loader](https://fabricmc.net/use/installer/) **0.20.1 eller senare** för **Minecraft 26.3**.
 3. Lägg JAR-filen i `mods`-mappen för den Minecraft-instans du använder.
    I en vanlig Windows-installation är det `%APPDATA%\.minecraft\mods`.
@@ -54,6 +54,15 @@ till dina fötter. **V** registrerar kistan du tittar på som restock-kista. Bå
 tangenterna och kistmarkeringens färg kan ändras i modulens inställningar.
 Starta bygget först när previewn står rätt. Bygget kräver allt återstående
 material i ditt inventory eller registrerade kistor och arbetar lager för lager.
+
+**Lager och inventory i 1.8.0:** hela lagret behöver inte få plats samtidigt.
+Byggaren använder tillgängligt material först, hämtar en mängd som ryms och
+fortsätter på samma lager. Den går vidare uppåt efter serverns bekräftelse.
+Block som väntar på stöd från andra block i lagret skjuts upp och provas igen.
+Placeringen söker gångbara platser med fri sikt till verkliga blockytor;
+placering mot kistor använder sneak. Befintligt vatten kan bevaras när ett
+vattenfyllt block placeras. Ett faktiskt hinder ger ett stopp med material och
+position, utan att bygget felaktigt markeras färdigt.
 
 Filval, preview, G-ankring, materialkontroll, gång till kista, materialhämtning och
 serverbekräftat lagerbygge har testats i Minecraft 26.3 survival **utan externa
@@ -113,6 +122,8 @@ blockstates stämmer. Se [registerrapporten](docs/placement-registry-26.3.tsv).
 
 ![Registrerad restock-kista med vald markeringsfärg](docs/minecraft-restock.png)
 
+![Lager färdigbyggt med en användbar inventory-plats](docs/minecraft-layer-success.png)
+
 ## Flytta HUD-paneler
 
 Aktivera först de HUD-moduler du vill visa. Tryck **T** för att öppna chatten,
@@ -167,7 +178,7 @@ spel- och resursservrar. Gradle-versionen är låst i wrappern och verifieras me
 ```
 
 På Windows: `gradlew.bat build`. Installationsfilen skapas i
-`build/libs/aurora-client-1.7.0.jar`; filen med `-sources` är källkod.
+`build/libs/aurora-client-1.8.0.jar`; filen med `-sources` är källkod.
 
 ```bash
 ./gradlew runClient     # interaktiv utvecklingsklient
@@ -190,7 +201,7 @@ sparade HUD-positioner, vanlig chattinmatning och ändrad GUI-skala.
 Testet sparar skärmbilder och en resultatfil; Gradle misslyckas om kontrollerna inte slutförs.
 
 Bygget kör även 34 grundkontroller, sex tester för HUD-positioner, två tester för modulinställningar,
-sju tester för byggplanering, tre tester för gångvägar, sju tester för `.litematic`-läsaren, sex tester för preview/materialantal och sju vätsketester via JUnit.
+14 tester för byggplanering, tre tester för gångvägar, sju tester för `.litematic`-läsaren, sex tester för preview/materialantal och sju vätsketester via JUnit.
 Speltestet verifierar dessutom filval, avbruten filväljare, texturerad preview,
 röda/gula ramar, döljning av rätt placerade block, återvisning efter borttagning,
 materiallistor, flyttning av material-HUD och G-ankring. Bildkontroller jämför
@@ -200,6 +211,11 @@ restock och ett faktiskt survival-bygge i två lager med trappa och dubbel slab.
 äldre kedjefil och bygger en kedja, tre vattenkällor och två lavakällor. Det
 kontrollerar att endast två vattenhinkar räcker via pool/påfyllning, att en
 lavahink hämtas från restock-kistan och att fyra tomma hinkar finns kvar efteråt.
+Ett regressionstest bygger också ett lager med **70 sten + 2 glas** vid negativa
+koordinater, med **35 fulla stackar andra föremål och bara en användbar plats**.
+Det kontrollerar flera kistturer, lagergränser, en väggfacklas stöd och placering
+ovanpå en kista. Separata tester täcker portionshämtning, receptordning och stopp
+när stöd saknas.
 Speltestet har körts
 lokalt på Minecraft **26.3**, Fabric Loader **0.20.1**, Java **25** och Linux med
 Mesa-mjukvarurendering. Windows, andra modpaket och inloggad multiplayer har inte

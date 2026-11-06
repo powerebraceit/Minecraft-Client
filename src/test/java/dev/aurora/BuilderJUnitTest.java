@@ -14,13 +14,28 @@ public final class BuilderJUnitTest {
         BuildSession.Stock stock = new BuildSession.Stock(Map.of(), true);
         String world = "world-a";
         boolean restocked;
-        boolean ready=true;
-        public boolean preparePlacement(BuildPlan.Block block) { return ready; }
+        boolean ready=true,busy;
+        int restockRequests;
+        BuildSession.Restock restockResult=BuildSession.Restock.PENDING;
+        Runnable restockAction=()->{};
+        java.util.function.Function<BuildPlan.Block,String> blocker=block->"";
+        final Map<BuildPlan.Block,String> preparationErrors=new HashMap<>();
+        final List<BuildPlan.Block> preparations=new ArrayList<>();
+        final List<Map<String,Integer>> restockRequirements=new ArrayList<>();
+        public boolean preparePlacement(BuildPlan.Block block) {
+            preparations.add(block);
+            if(preparationErrors.containsKey(block))throw new IllegalStateException(preparationErrors.get(block));
+            return ready;
+        }
+        public String placementBlocker(BuildPlan.Block block) {return blocker.apply(block);}
+        public boolean busyRestocking() {return busy;}
         public String worldIdentity() { return world; }
         public boolean placed(BuildPlan.Block b) { return placed.contains(b); }
         public Map<String,Integer> inventory() { return inventory; }
         public BuildSession.Stock stock() { return stock; }
-        public BuildSession.Restock restock(Map<String,Integer> layer) { restocked = true; return BuildSession.Restock.PENDING; }
+        public BuildSession.Restock restock(Map<String,Integer> layer) {
+            restocked=true;restockRequests++;restockRequirements.add(Map.copyOf(layer));restockAction.run();return restockResult;
+        }
         public void place(BuildPlan.Block b) { requests.add(b); }
     }
     @Test void noPlacementUntilEveryMaterialIsAvailable() {
@@ -75,5 +90,78 @@ public final class BuilderJUnitTest {
         var session = new BuildSession(new BuildPlan(List.of(block(0))));
         assertTrue(session.start(driver));assertEquals(BuildSession.State.COMPLETE,session.state());
         assertThrows(IllegalArgumentException.class,()->new BuildPlan(List.of(block(0),block(0))));
+    }
+
+    @Test void usesEligibleInventoryMaterialBeforeFetchingSortedFirstMissingMaterial() {
+        var stone=new BuildPlan.Block(0,0,0,"minecraft:stone",1,"stone");
+        var glass=new BuildPlan.Block(1,0,0,"minecraft:glass",1,"glass");
+        var driver=new Driver();driver.inventory.put("minecraft:glass",1);driver.stock=new BuildSession.Stock(Map.of("minecraft:stone",1),true);
+        var session=new BuildSession(new BuildPlan(List.of(stone,glass)));assertTrue(session.start(driver));
+        session.tick(driver);assertEquals(List.of(glass),driver.requests);assertEquals(0,driver.restockRequests);
+        session.tick(driver);assertEquals(List.of(glass),driver.requests);assertEquals(0,driver.restockRequests);
+        driver.placed.add(glass);driver.inventory.clear();session.tick(driver);
+        assertEquals(1,driver.restockRequests);assertEquals(List.of(Map.of("minecraft:stone",1)),driver.restockRequirements);
+    }
+    @Test void deferredPlacementRetriesAfterAnotherBlockInTheSameLayerIsConfirmed() {
+        var unsupported=new BuildPlan.Block(0,0,0,"minecraft:stone",1,"needs side support");
+        var support=new BuildPlan.Block(1,0,0,"minecraft:stone",1,"support");
+        var driver=new Driver();driver.inventory.put("minecraft:stone",2);driver.preparationErrors.put(unsupported,"Missing side support");
+        var session=new BuildSession(new BuildPlan(List.of(unsupported,support)));assertTrue(session.start(driver));
+        session.tick(driver);assertTrue(driver.requests.isEmpty());assertEquals(BuildSession.State.BUILDING,session.state());
+        session.tick(driver);assertEquals(List.of(support),driver.requests);
+        session.tick(driver);assertEquals(List.of(unsupported,support),driver.preparations);
+        driver.placed.add(support);driver.preparationErrors.remove(unsupported);session.tick(driver);
+        assertEquals(List.of(support,unsupported),driver.requests);
+        assertEquals(List.of(unsupported,support,unsupported),driver.preparations);
+    }
+    @Test void unconfirmedLowerLayerForbidsAnyHigherLayerPlacement() {
+        var lower=block(0);var higher=block(1);var driver=new Driver();driver.inventory.put("minecraft:stone",2);
+        var session=new BuildSession(new BuildPlan(List.of(higher,lower)));assertTrue(session.start(driver));session.tick(driver);
+        for(int tick=0;tick<80;tick++)session.tick(driver);
+        assertEquals(List.of(lower),driver.requests);assertEquals(BuildSession.State.BUILDING,session.state());
+        driver.placed.add(lower);session.tick(driver);assertEquals(List.of(lower,higher),driver.requests);
+    }
+    @Test void recipeBlockerPreventsPlantingUntilThePotIsServerConfirmed() {
+        var pot=new BuildPlan.Block(0,0,0,"minecraft:flower_pot",1,"empty pot",0,0);
+        var mushroom=new BuildPlan.Block(0,0,0,"minecraft:red_mushroom",1,"potted mushroom",1,0);
+        var higher=new BuildPlan.Block(0,1,0,"minecraft:stone",1,"higher layer");
+        var driver=new Driver();driver.inventory.put("minecraft:red_mushroom",1);driver.inventory.put("minecraft:stone",1);
+        driver.stock=new BuildSession.Stock(Map.of("minecraft:flower_pot",1),true);
+        driver.blocker=action->action.equals(mushroom) && !driver.placed.contains(pot)?"Place pot first":"";
+        var session=new BuildSession(new BuildPlan(List.of(pot,mushroom,higher)));assertTrue(session.start(driver));session.tick(driver);
+        assertTrue(driver.requests.isEmpty());assertEquals(List.of(Map.of("minecraft:flower_pot",1)),driver.restockRequirements);
+        driver.inventory.put("minecraft:flower_pot",1);session.tick(driver);assertEquals(List.of(pot),driver.requests);
+        session.tick(driver);assertEquals(List.of(pot),driver.requests);
+        driver.placed.add(pot);driver.inventory.remove("minecraft:flower_pot");session.tick(driver);
+        assertEquals(List.of(pot,mushroom),driver.requests);
+        session.tick(driver);assertEquals(List.of(pot,mushroom),driver.requests);
+        driver.placed.add(mushroom);driver.inventory.remove("minecraft:red_mushroom");session.tick(driver);
+        assertEquals(List.of(pot,mushroom,higher),driver.requests);
+    }
+    @Test void partialRestockCompleteResumesBuildingWithoutDemandingTheWholeLayer() {
+        var actions=List.of(new BuildPlan.Block(0,0,0,"minecraft:stone",1,"stone"),new BuildPlan.Block(1,0,0,"minecraft:stone",1,"stone"),new BuildPlan.Block(2,0,0,"minecraft:stone",1,"stone"));
+        var driver=new Driver();driver.stock=new BuildSession.Stock(Map.of("minecraft:stone",3),true);
+        driver.restockResult=BuildSession.Restock.COMPLETE;driver.restockAction=()->driver.inventory.put("minecraft:stone",1);
+        var session=new BuildSession(new BuildPlan(actions));assertTrue(session.start(driver));
+        for(int index=0;index<actions.size();index++) {
+            session.tick(driver);assertEquals(index+1,driver.restockRequests); // fetch only one usable item
+            session.tick(driver);assertEquals(actions.subList(0,index+1),driver.requests);
+            driver.placed.add(actions.get(index));driver.inventory.clear();
+        }
+        session.tick(driver);assertEquals(BuildSession.State.COMPLETE,session.state());assertEquals(3,driver.restockRequests);
+        assertEquals(List.of(Map.of("minecraft:stone",3),Map.of("minecraft:stone",2),Map.of("minecraft:stone",1)),driver.restockRequirements);
+    }
+    @Test void fullInventoryWithoutUsableMaterialPausesWithActionableReason() {
+        var driver=new Driver();driver.inventory.put("minecraft:cobblestone",36*64);driver.stock=new BuildSession.Stock(Map.of("minecraft:stone",1),true);
+        driver.restockResult=BuildSession.Restock.BLOCKED;
+        var session=new BuildSession(new BuildPlan(List.of(block(0))));assertTrue(session.start(driver));session.tick(driver);
+        assertEquals(BuildSession.State.PAUSED,session.state());assertTrue(session.status().contains("free an inventory slot"));assertTrue(driver.requests.isEmpty());
+        for(int tick=0;tick<5;tick++)session.tick(driver);assertEquals(1,driver.restockRequests);
+    }
+    @Test void inventoryPredictionDoesNotStartPlacementBeforeRestockSynchronizationFinishes() {
+        var driver=new Driver();driver.inventory.put("minecraft:stone",1);driver.busy=true;
+        var session=new BuildSession(new BuildPlan(List.of(block(0))));assertTrue(session.start(driver));session.tick(driver);
+        assertEquals(BuildSession.State.RESTOCKING,session.state());assertTrue(driver.requests.isEmpty());
+        driver.busy=false;session.tick(driver);assertEquals(List.of(block(0)),driver.requests);
     }
 }
