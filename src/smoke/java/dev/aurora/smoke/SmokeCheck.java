@@ -4,13 +4,16 @@ import dev.aurora.core.ClientConfig;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.aurora.minecraft.AuroraClient;
 import dev.aurora.minecraft.AuroraScreen;
+import dev.aurora.minecraft.AuroraHud;
 import dev.aurora.smoke.mixin.ChatAccessor;
+import dev.aurora.smoke.mixin.ChatInputAccessor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.AccessibilityOnboardingScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
@@ -30,6 +33,7 @@ import net.minecraft.world.item.Items;
 public final class SmokeCheck {
     private static int stage, ticks, stageTick;
     private static boolean finished;
+    private static int originalGuiScale;
     private static final Path RESULT = Path.of("aurora-smoke-result.txt");
 
     private static void check(boolean condition, String message) {
@@ -57,7 +61,11 @@ public final class SmokeCheck {
             } else if (stage == 1 && mc.player != null && mc.gui.screen() == null && mc.gui.overlay() == null) {
                 check(mc.level != null, "Loaded real singleplayer world");
                 check(ClientConfig.RIGHT_SHIFT == InputConstants.KEY_RSHIFT, "Default binding matches Minecraft 26.3 Right Shift scancode");
-                mc.player.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+                for (var module : client.modules().all()) client.config().resetHudPosition(module.id());
+                equip(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET), 0.1);
+                equip(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE), 0.6);
+                equip(EquipmentSlot.LEGS, new ItemStack(Items.IRON_LEGGINGS), 0.9);
+                equip(EquipmentSlot.FEET, new ItemStack(Items.IRON_BOOTS), 0.2);
                 mc.player.setXRot(90);
                 client.config().menuKey(ClientConfig.RIGHT_SHIFT);
                 mc.keyboardHandler.keyPress(mc.getWindow().handle(), 1, new KeyEvent(229, 0, 0));
@@ -96,16 +104,59 @@ public final class SmokeCheck {
                 check(mc.player.input.keyPresses.sprint(), "Toggle Sprint applied to real player input");
                 check(mc.gameRenderer.mainCamera().getFov() < 35, "Zoom changes real camera FOV");
                 capture("aurora-hud.png");
+                var armor = AuroraHud.panels().get("armor_status");
+                check(armor != null && armor.height() == 104, "Armor HUD contains four equipped armor rows");
+                check(armor.x() == mc.getWindow().getGuiScaledWidth() - armor.width() - 8
+                    && armor.y() == mc.getWindow().getGuiScaledHeight() - armor.height() - 44, "Armor HUD defaults to bottom right");
+                check(!AuroraHud.beginDrag(armor.x() + 10, armor.y() + 10), "HUD cannot be dragged outside chat");
+                mc.keyboardHandler.keyPress(mc.getWindow().handle(), 1, new KeyEvent(InputConstants.KEY_T, 0, 0));
+                stage = 4; stageTick = ticks;
+            } else if (stage == 4 && ticks - stageTick > 20) {
+                check(mc.gui.screen() instanceof ChatScreen, "T opens real chat screen");
+                ChatScreen chat = (ChatScreen) mc.gui.screen();
+                var armor = AuroraHud.panels().get("armor_status");
+                check(chat.mouseClicked(mouse(armor.x() + 10, armor.y() + 10), false), "Chat mouse press grabs armor panel");
+                check(chat.mouseDragged(mouse(100, 80), 0, 0), "Chat mouse drag moves armor panel");
+                check(chat.mouseReleased(mouse(100, 80)), "Chat mouse release finishes drag");
+                var movedArmor = AuroraHud.panels().get("armor_status");
+                check(movedArmor.x() == 90 && movedArmor.y() == 70, "Dragging preserves cursor offset");
+                check(ClientConfig.load(Path.of("config/aurora.properties")).hudPosition("armor_status") != null, "Armor position saved on mouse release");
+                var fps = AuroraHud.panels().get("fps_counter");
+                chat.mouseClicked(mouse(fps.x() + 5, fps.y() + 5), false);
+                chat.mouseDragged(mouse(240, 25), 0, 0);
+                chat.onClose();
+                check(ClientConfig.load(Path.of("config/aurora.properties")).hudPosition("fps_counter") != null, "Closing chat during drag saves other HUD panels");
+                mc.keyboardHandler.keyPress(mc.getWindow().handle(), 1, new KeyEvent(InputConstants.KEY_T, 0, 0));
+                stage = 5; stageTick = ticks;
+            } else if (stage == 5 && ticks - stageTick > 20) {
+                ChatScreen chat = (ChatScreen) mc.gui.screen();
+                var input = ((ChatInputAccessor) chat).aurora$input();
+                String before = input.getValue();
+                chat.charTyped(new CharacterEvent('h'));
+                check(input.getValue().equals(before + "h"), "Normal chat typing works after HUD dragging");
+                capture("aurora-hud-editor.png");
+                chat.onClose();
+                check(!AuroraHud.drag(10, 10), "Chat close ends dragging");
+                originalGuiScale = mc.options.guiScale().get();
+                mc.options.guiScale().set(1);
+                mc.resizeGui();
+                stage = 6; stageTick = ticks;
+            } else if (stage == 6 && ticks - stageTick > 20) {
+                int width = mc.getWindow().getGuiScaledWidth(), height = mc.getWindow().getGuiScaledHeight();
+                check(AuroraHud.panels().values().stream().allMatch(b -> b.x() >= 0 && b.y() >= 0
+                    && b.x() + b.width() <= width && b.y() + b.height() <= height - 24), "Saved HUD positions remain visible after GUI scale change");
+                mc.options.guiScale().set(originalGuiScale); mc.resizeGui();
                 for (var module : client.modules().all()) { module.setEnabled(false); client.config().remember(module); }
                 client.save();
-                stage = 4; stageTick = ticks;
-            } else if (stage == 4 && ticks - stageTick > 30) {
+                stage = 7; stageTick = ticks;
+            } else if (stage == 7 && ticks - stageTick > 30) {
                 check(!mc.player.input.keyPresses.shift(), "Disabling Sneak restores player input");
                 check(!mc.player.input.keyPresses.sprint(), "Disabling Sprint restores player input");
                 check(mc.gameRenderer.mainCamera().getFov() > 50, "Disabling Zoom restores camera FOV");
                 check(ClientConfig.load(Path.of("config/aurora.properties")).menuKey() == 229, "Default binding restored and saved");
                 check(Files.exists(Path.of("screenshots/aurora-menu.png")) && Files.exists(Path.of("screenshots/aurora-hud.png")), "Game screenshots captured");
-                Files.writeString(RESULT, "PASS: Minecraft 26.3 client loaded, world entered, menu rendered, binding changed, modules persisted, movement/HUD/chat/zoom exercised and restored.\n");
+                check(Files.exists(Path.of("screenshots/aurora-hud-editor.png")), "HUD editor screenshot captured");
+                Files.writeString(RESULT, "PASS: Minecraft 26.3 client, world, menu, binding, modules, four armor icons, chat HUD dragging, saved positions and GUI scaling verified.\n");
                 finished = true;
                 AuroraClient.LOG.info("AURORA SMOKE COMPLETE: PASS");
                 mc.stop();
@@ -116,6 +167,15 @@ public final class SmokeCheck {
             try { Files.writeString(RESULT, "FAIL: " + error + "\n"); } catch (Exception ignored) { }
             mc.stop();
         }
+    }
+
+    private static void equip(EquipmentSlot slot, ItemStack stack, double damageFraction) {
+        stack.setDamageValue((int) (stack.getMaxDamage() * damageFraction));
+        Minecraft.getInstance().player.setItemSlot(slot, stack);
+    }
+
+    private static MouseButtonEvent mouse(double x, double y) {
+        return new MouseButtonEvent(x, y, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0));
     }
 
     private static void capture(String name) throws Exception {

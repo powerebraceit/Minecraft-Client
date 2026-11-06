@@ -16,13 +16,13 @@ jobs:
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v4
       - run: bash gradlew build --no-daemon
-      - run: sha256sum build/libs/aurora-client-1.0.0.jar > build/libs/aurora-client-1.0.0.jar.sha256
+      - run: sha256sum build/libs/aurora-client-1.1.0.jar > build/libs/aurora-client-1.1.0.jar.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: aurora-client-minecraft-26.3
           path: |
-            build/libs/aurora-client-1.0.0.jar
-            build/libs/aurora-client-1.0.0.jar.sha256
+            build/libs/aurora-client-1.1.0.jar
+            build/libs/aurora-client-1.1.0.jar.sha256
       - name: Install virtual display for integration checks
         run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libegl1
       - name: Check real Minecraft client
@@ -39,3 +39,4 @@ jobs:
             run/smoke/aurora-smoke-result.txt
             run/smoke/screenshots/aurora-menu.png
             run/smoke/screenshots/aurora-hud.png
+            run/smoke/screenshots/aurora-hud-editor.png

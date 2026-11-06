@@ -58,7 +58,7 @@ loom {
 
 tasks.named('runSmoke').configure {
     doFirst {
-        delete 'run/smoke/aurora-smoke-result.txt', 'run/smoke/screenshots/aurora-menu.png', 'run/smoke/screenshots/aurora-hud.png'
+        delete 'run/smoke/aurora-smoke-result.txt', 'run/smoke/screenshots/aurora-menu.png', 'run/smoke/screenshots/aurora-hud.png', 'run/smoke/screenshots/aurora-hud-editor.png'
     }
     doLast {
         def result = file('run/smoke/aurora-smoke-result.txt')

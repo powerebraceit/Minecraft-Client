@@ -5,7 +5,7 @@ lila accenter, fem modulkategorier och sökning över alla kategorier.
 
 ## Ladda ner och installera
 
-1. [Ladda ner aurora-client-1.0.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.0.0/releases/1.0.0/aurora-client-1.0.0.jar).
+1. [Ladda ner aurora-client-1.1.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.1.0/releases/1.1.0/aurora-client-1.1.0.jar).
 2. Installera [Fabric Loader](https://fabricmc.net/use/installer/) **0.20.1 eller senare** för **Minecraft 26.3**.
 3. Lägg JAR-filen i `mods`-mappen för den Minecraft-instans du använder.
    I en vanlig Windows-installation är det `%APPDATA%\.minecraft\mods`.
@@ -28,16 +28,33 @@ med dubbelklick eller `java -jar`.
 - **Animations: On/Off** växlar mellan mjuka animationer och reducerad rörelse.
 - Menyn pausar inte världen. Tangentöppningen är aktiv när ingen annan meny är öppen.
 
-Moduler, menytangent och animationsval sparas i `config/aurora.properties`.
+Moduler, menytangent, HUD-positioner och animationsval sparas i `config/aurora.properties`.
 Alla moduler är avstängda vid första starten. För att återställa en glömd
 menytangent, stäng spelet och ta bort raden `menu.key` från konfigurationsfilen.
+
+## Flytta HUD-paneler
+
+Aktivera först de HUD-moduler du vill visa. Tryck **T** för att öppna chatten,
+håll vänster musknapp över en HUD-panel och dra den till önskad plats. Släpp
+musknappen för att spara. Positionen sparas även om du stänger chatten mitt i en
+förflyttning. Du kan flytta Armor Status, FPS Counter, Coordinates, Biome Info,
+Block Info och Attack Cooldown var för sig. Vanlig chattinmatning fungerar fortfarande.
+
+Armor Status visar hjälm, bröstplåt, byxor och stövlar i utrustningsordning, med
+ikoner, hållbarhetsstaplar och `kvar/max` bredvid varje ikon. Hållbarhetstexten blir
+gul eller röd när rustningen börjar slitas. Endast utrustade delar visas. När chatten
+är öppen visas en flyttbar platshållare även om ingen rustning är utrustad.
+
+Positionerna anpassas till fönsterstorlek och GUI-skala och hålls ovanför chattens
+inmatningsfält. För att återställa en panel till standardpositionen, stäng spelet
+och ta bort dess `hud.<modulnamn>.x` och `.y`-rader i `config/aurora.properties`.
 
 ## Moduler
 
 | Kategori | Modul | Funktion |
 | --- | --- | --- |
 | Combat | Attack Cooldown | Visar hur redo nästa slag är i procent. |
-| Combat | Armor Status | Visar utrustad rustning och återstående hållbarhet. |
+| Combat | Armor Status | Rustningsikoner med hållbarhet bredvid, nere till höger som standard. |
 | Movement | Toggle Sprint | Håller sprintinmatningen aktiv; spelets vanliga rörelsekrav gäller. |
 | Movement | Toggle Sneak | Håller smyginmatningen aktiv tills modulen stängs av. |
 | Render | Zoom | Mjuk zoom till en fjärdedel av normalt synfält. |
@@ -54,7 +71,9 @@ orörda. HUD och zoom kräver en laddad värld. HUD följer spelets döljning av
 
 ![Aurora-menyn i Minecraft](docs/minecraft-menu.png)
 
-![Aktiverade HUD-moduler, zoom och tidsstämplar](docs/minecraft-hud.png)
+![Rustningsikoner och hållbarhet nere till höger](docs/minecraft-hud.png)
+
+![Flytta HUD-paneler med chatten öppen](docs/minecraft-hud-editor.png)
 
 ## Bygga och testa
 
@@ -66,7 +85,7 @@ spel- och resursservrar. Gradle-versionen är låst i wrappern och verifieras me
 ```
 
 På Windows: `gradlew.bat build`. Installationsfilen skapas i
-`build/libs/aurora-client-1.0.0.jar`; filen med `-sources` är källkod.
+`build/libs/aurora-client-1.1.0.jar`; filen med `-sources` är källkod.
 
 ```bash
 ./gradlew runClient     # interaktiv utvecklingsklient
@@ -84,9 +103,11 @@ Integrationstestet ligger i `src/smoke`, ingår inte i den distribuerade JAR-fil
 och använder en egen spelkatalog, `run/smoke`. Det kontrollerar verklig spelstart,
 världsladdning, höger Shift, sökning och musklick, tangentbyte via menyn, sparade
 inställningar, chatt, rörelse och kamerazoom samt återställning när moduler stängs av.
+Testet verifierar även fyra rustningsikoner, dragning via chattens mushändelser,
+sparade HUD-positioner, vanlig chattinmatning och ändrad GUI-skala.
 Testet sparar skärmbilder och en resultatfil; Gradle misslyckas om kontrollerna inte slutförs.
 
-Bygget kör även 32 fristående beteendekontroller via JUnit. Speltestet har körts
+Bygget kör även 32 grundkontroller och sex tester för HUD-positioner via JUnit. Speltestet har körts
 lokalt på Minecraft **26.3**, Fabric Loader **0.20.1**, Java **25** och Linux med
 Mesa-mjukvarurendering. Windows, andra modpaket och inloggad multiplayer har inte
 testats i den här miljön.

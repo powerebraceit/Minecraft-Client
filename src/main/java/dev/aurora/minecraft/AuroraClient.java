@@ -45,7 +45,8 @@ public final class AuroraClient implements ClientModInitializer {
             // Effects are applied by the input, camera, HUD and chat hooks only while enabled.
             if (config.enabledModules().contains(module.id())) module.setEnabled(true);
         }
-        LOG.info("Aurora 1.0.0 initialized for Minecraft 26.3: {} modules", modules.all().size());
+        LOG.info("Aurora {} initialized for Minecraft 26.3: {} modules",
+            FabricLoader.getInstance().getModContainer("aurora").orElseThrow().getMetadata().getVersion(), modules.all().size());
     }
 
     public boolean enabled(String id) {

@@ -10,6 +10,8 @@ import java.nio.file.StandardCopyOption;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
+import java.util.Map;
+import java.util.HashMap;
 
 /** SDL keyboard scancodes, matching Minecraft 26.3's InputConstants. */
 public final class ClientConfig {
@@ -19,6 +21,7 @@ public final class ClientConfig {
     private int menuKey = RIGHT_SHIFT;
     private boolean reducedMotion;
     private final Set<String> enabled = new HashSet<>();
+    private final Map<String, HudLayout.Position> hudPositions = new HashMap<>();
 
     public int menuKey() { return menuKey; }
     public void menuKey(int key) {
@@ -28,6 +31,12 @@ public final class ClientConfig {
     public boolean reducedMotion() { return reducedMotion; }
     public void reducedMotion(boolean value) { reducedMotion = value; }
     public Set<String> enabledModules() { return Set.copyOf(enabled); }
+    public HudLayout.Position hudPosition(String id) { return hudPositions.get(id); }
+    public void resetHudPosition(String id) { hudPositions.remove(id); }
+    public void hudPosition(String id, HudLayout.Position position) {
+        if (!id.matches("[a-z][a-z0-9_]*")) throw new IllegalArgumentException("Invalid HUD id");
+        hudPositions.put(id, java.util.Objects.requireNonNull(position));
+    }
     public void remember(ClientModule module) {
         if (module.enabled()) enabled.add(module.id()); else enabled.remove(module.id());
     }
@@ -43,6 +52,14 @@ public final class ClientConfig {
         for (String id : p.getProperty("modules.enabled", "").split(",")) {
             if (id.matches("[a-z][a-z0-9_]*")) config.enabled.add(id);
         }
+        for (String key : p.stringPropertyNames()) {
+            if (!key.matches("hud\\.[a-z][a-z0-9_]*\\.x")) continue;
+            String id = key.substring(4, key.length() - 2);
+            try {
+                config.hudPosition(id, new HudLayout.Position(Double.parseDouble(p.getProperty(key)),
+                    Double.parseDouble(p.getProperty("hud." + id + ".y", "NaN"))));
+            } catch (IllegalArgumentException ignored) { /* Ignore only the malformed panel position. */ }
+        }
         return config;
     }
 
@@ -53,6 +70,10 @@ public final class ClientConfig {
         p.setProperty("menu.key", Integer.toString(menuKey));
         p.setProperty("ui.reducedMotion", Boolean.toString(reducedMotion));
         p.setProperty("modules.enabled", String.join(",", enabled.stream().sorted().toList()));
+        hudPositions.forEach((id, position) -> {
+            p.setProperty("hud." + id + ".x", Double.toString(position.x()));
+            p.setProperty("hud." + id + ".y", Double.toString(position.y()));
+        });
         Path tmp = Files.createTempFile(target.getParent(), "aurora-", ".tmp");
         try {
             try (Writer writer = Files.newBufferedWriter(tmp)) { p.store(writer, "Aurora Client settings"); }
