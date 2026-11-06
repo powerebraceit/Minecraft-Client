@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.IntFunction;
+import java.util.function.Consumer;
 
 /** Animated GUI state and hit testing, independent of changing Minecraft rendering APIs. */
 public final class ClickGui {
@@ -23,6 +24,8 @@ public final class ClickGui {
     private boolean searchFocused, rebinding;
     private float progress, scroll, x, y, width = 680, height = 420;
     private String status = "";
+    private Consumer<ClientModule> openSettings = module -> { };
+    public void onSettings(Consumer<ClientModule> callback) { openSettings = Objects.requireNonNull(callback); }
 
     public ClickGui(ModuleRegistry registry, ClientConfig config, Runnable persist) {
         this(registry, config, persist, key -> key == ClientConfig.RIGHT_SHIFT ? "Right Shift" : "Key " + key);
@@ -89,12 +92,24 @@ public final class ClickGui {
         canvas.roundedRect(left, y + height - 56, bodyWidth, 26, 7, rebinding ? 0xff41355c : 0xff252b40);
         String binding = keyName.apply(config.menuKey());
         canvas.text(ellipsis(rebinding ? "Press a key (Esc cancels)" : "Menu key: " + binding + "  /  Change", bodyWidth - 18, 9), left + 9, y + height - 47, 9, WHITE);
-        canvas.text(ellipsis(status.isEmpty() ? "Esc to close  /  Scroll to browse" : status, bodyWidth, 8), left, y + height - 18, 8, MUTED);
+        canvas.text(ellipsis(status.isEmpty() ? "Right click: settings  /  Esc: close" : status, bodyWidth, 8), left, y + height - 18, 8, MUTED);
     }
 
     public boolean click(double mx, double my, int button) {
-        if (button != 0 || rebinding) return false;
+        if ((button != 0 && button != 1) || rebinding) return false;
         float left = x + 166, bodyWidth = width - 184;
+        if (button == 1) {
+            if (!inside(mx, my, left, y + 110, bodyWidth, height - 176)) return false;
+            float row = (float) (my - y - 110 + scroll);
+            int index = (int) (row / 66);
+            List<ClientModule> modules = visible();
+            if (index >= 0 && index < modules.size() && row % 66 < 58) {
+                searchFocused = false;
+                openSettings.accept(modules.get(index));
+                return true;
+            }
+            return false;
+        }
         searchFocused = inside(mx, my, left, y + 67, bodyWidth, 32);
         if (searchFocused) return true;
         if (inside(mx, my, left + bodyWidth - 116, y + 19, 116, 24)) {

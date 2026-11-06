@@ -20,6 +20,7 @@ public final class CoreTest {
         check(registry.search(Category.COMBAT, "  zOoM  ").getFirst().id().equals("zoom"), "Global case-insensitive search");
         check(registry.search(Category.COMBAT, "durability").size() == 1, "Description search");
         check(registry.search(Category.COMBAT, "unknown module").isEmpty(), "No results");
+        var opened = new java.util.concurrent.atomic.AtomicReference<ClientModule>();
         try { registry.add(registry.get("zoom")); throw new AssertionError("Duplicate accepted"); }
         catch (IllegalArgumentException expected) { checks++; }
         ClientModule zoom = registry.get("zoom");
@@ -49,10 +50,13 @@ public final class CoreTest {
             check(ClientConfig.load(path).enabledModules().size() == 1, "Ignore invalid module ids");
             AtomicInteger saves = new AtomicInteger();
             ClickGui gui = new ClickGui(registry, config, saves::incrementAndGet);
+            gui.onSettings(opened::set);
             RecordingCanvas canvas = new RecordingCanvas();
             // A 720x460 viewport places the panel at (20,20).
             gui.render(canvas, 720, 460, 0, 0, 1);
             check(canvas.clipDepth == 0 && canvas.rectangles > 10, "Render and balanced clipping");
+            check(gui.click(220, 140, 1), "Right click opens module settings");
+            check(opened.get() == registry.get("attack_cooldown") && !opened.get().enabled(), "Settings do not toggle module");
             check(gui.click(220, 100, 0), "Focus search");
             for (char c : "zoom".toCharArray()) gui.charTyped(c);
             check(gui.visible().size() == 1 && gui.visible().getFirst() == zoom, "Search input");

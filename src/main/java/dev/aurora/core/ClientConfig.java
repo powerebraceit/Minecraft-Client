@@ -22,6 +22,21 @@ public final class ClientConfig {
     private boolean reducedMotion;
     private final Set<String> enabled = new HashSet<>();
     private final Map<String, HudLayout.Position> hudPositions = new HashMap<>();
+    private final Map<String, String> settings = new HashMap<>();
+
+    public String option(String module, String name, String fallback) { return settings.getOrDefault(module + "." + name, fallback); }
+    public boolean flag(String module, String name, boolean fallback) {
+        String value = option(module, name, "");
+        return value.equalsIgnoreCase("true") ? true : value.equalsIgnoreCase("false") ? false : fallback;
+    }
+    public int number(String module, String name, int fallback) {
+        try { return Integer.parseInt(option(module, name, Integer.toString(fallback))); }
+        catch (NumberFormatException ignored) { return fallback; }
+    }
+    public void setting(String module, String name, String value) {
+        if (!module.matches("[a-z][a-z0-9_]*") || !name.matches("[a-z][a-z0-9_]*")) throw new IllegalArgumentException("Invalid setting id");
+        settings.put(module + "." + name, java.util.Objects.requireNonNull(value));
+    }
 
     public int menuKey() { return menuKey; }
     public void menuKey(int key) {
@@ -53,6 +68,7 @@ public final class ClientConfig {
             if (id.matches("[a-z][a-z0-9_]*")) config.enabled.add(id);
         }
         for (String key : p.stringPropertyNames()) {
+            if (key.matches("module\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*")) config.settings.put(key.substring(7), p.getProperty(key));
             if (!key.matches("hud\\.[a-z][a-z0-9_]*\\.x")) continue;
             String id = key.substring(4, key.length() - 2);
             try {
@@ -70,6 +86,7 @@ public final class ClientConfig {
         p.setProperty("menu.key", Integer.toString(menuKey));
         p.setProperty("ui.reducedMotion", Boolean.toString(reducedMotion));
         p.setProperty("modules.enabled", String.join(",", enabled.stream().sorted().toList()));
+        settings.forEach((key, value) -> p.setProperty("module." + key, value));
         hudPositions.forEach((id, position) -> {
             p.setProperty("hud." + id + ".x", Double.toString(position.x()));
             p.setProperty("hud." + id + ".y", Double.toString(position.y()));

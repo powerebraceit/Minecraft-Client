@@ -54,6 +54,17 @@ public final class AuroraClient implements ClientModInitializer {
         return module != null && module.enabled();
     }
 
+    public boolean moduleKey(int key) {
+        for (ClientModule module : modules.all()) {
+            if (key != 0 && config.number(module.id(), "key", 0) == key && module.available()) {
+                module.setEnabled(!module.enabled()); config.remember(module);
+                try { save(); } catch (IllegalStateException ignored) { }
+                return true;
+            }
+        }
+        return false;
+    }
+
     public void save() {
         try { config.save(configPath); }
         catch (IOException error) {
@@ -73,14 +84,14 @@ public final class AuroraClient implements ClientModInitializer {
         long now = System.nanoTime();
         double dt = lastZoomNanos == 0 ? 0 : Math.min((now - lastZoomNanos) / 1e9, 0.1);
         lastZoomNanos = now;
-        double target = enabled("zoom") && mc.player != null ? 0.25 : 1;
-        zoomFactor = config.reducedMotion() ? target : zoomFactor + (target - zoomFactor) * -Math.expm1(-12 * dt);
+        double target = enabled("zoom") && mc.player != null ? 1.0 / Math.clamp(config.number("zoom", "factor", 4), 2, 16) : 1;
+        zoomFactor = config.reducedMotion() || !config.flag("zoom", "smooth", true) ? target : zoomFactor + (target - zoomFactor) * -Math.expm1(-12 * dt);
         return (float) (originalFov * zoomFactor);
     }
 
     public Component timestamp(Component original) {
         if (!enabled("chat_timestamps")) return original;
-        String time = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
+        String time = LocalTime.now().format(DateTimeFormatter.ofPattern(config.flag("chat_timestamps", "seconds", false) ? "HH:mm:ss" : "HH:mm"));
         return Component.empty().append(Component.literal("[" + time + "] ").withColor(0x9b8aff)).append(original);
     }
 }

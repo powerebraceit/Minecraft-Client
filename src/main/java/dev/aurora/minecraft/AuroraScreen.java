@@ -19,6 +19,7 @@ public final class AuroraScreen extends Screen {
         this.client = client;
         gui = new ClickGui(client.modules(), client.config(), client::save,
             key -> InputConstants.Type.KEYBOARD.getOrCreate(key).getDisplayName().getString());
+        gui.onSettings(module -> minecraft.gui.setScreen(new ModuleSettingsScreen(this, client, module)));
     }
 
     private float scale() { return Math.max(0.1f, Math.min(1, Math.min(width / 720f, height / 460f))); }
@@ -35,8 +36,8 @@ public final class AuroraScreen extends Screen {
     }
 
     @Override public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) return super.mouseClicked(event, doubleClick);
-        return gui.click(event.x() / scale(), event.y() / scale(), 0) || super.mouseClicked(event, doubleClick);
+        if (event.button() != InputConstants.MOUSE_BUTTON_LEFT && event.button() != InputConstants.MOUSE_BUTTON_RIGHT) return super.mouseClicked(event, doubleClick);
+        return gui.click(event.x() / scale(), event.y() / scale(), event.button() == InputConstants.MOUSE_BUTTON_LEFT ? 0 : 1) || super.mouseClicked(event, doubleClick);
     }
     @Override public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
         gui.scroll(vertical); return true;

@@ -4,6 +4,7 @@ import dev.aurora.core.ClientConfig;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.aurora.minecraft.AuroraClient;
 import dev.aurora.minecraft.AuroraScreen;
+import dev.aurora.minecraft.ModuleSettingsScreen;
 import dev.aurora.minecraft.AuroraHud;
 import dev.aurora.smoke.mixin.ChatAccessor;
 import dev.aurora.smoke.mixin.ChatInputAccessor;
@@ -61,7 +62,11 @@ public final class SmokeCheck {
             } else if (stage == 1 && mc.player != null && mc.gui.screen() == null && mc.gui.overlay() == null) {
                 check(mc.level != null, "Loaded real singleplayer world");
                 check(ClientConfig.RIGHT_SHIFT == InputConstants.KEY_RSHIFT, "Default binding matches Minecraft 26.3 Right Shift scancode");
-                for (var module : client.modules().all()) client.config().resetHudPosition(module.id());
+                for (var module : client.modules().all()) {
+                    client.config().resetHudPosition(module.id());
+                    client.config().setting(module.id(), "background", "true");
+                    client.config().setting(module.id(), "key", "0");
+                }
                 equip(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET), 0.1);
                 equip(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE), 0.6);
                 equip(EquipmentSlot.LEGS, new ItemStack(Items.IRON_LEGGINGS), 0.9);
@@ -84,6 +89,21 @@ public final class SmokeCheck {
                 check(!client.enabled("zoom"), "Native left-click and global search toggle Zoom from Combat category");
                 clickPanel(menu, 200, 135);
                 check(client.enabled("zoom"), "Native left-click re-enables Zoom");
+                clickPanel(menu, 40, 110);
+                float menuScale = Math.max(0.1f, Math.min(1, Math.min(menu.width / 720f, menu.height / 460f)));
+                double menuX = (Math.round(menu.width / menuScale) - 680) / 2f;
+                double menuY = (Math.round(menu.height / menuScale) - 420) / 2f;
+                menu.mouseClicked(new MouseButtonEvent((menuX + 200) * menuScale, (menuY + 188) * menuScale,
+                    new MouseButtonInfo(InputConstants.MOUSE_BUTTON_RIGHT, 0)), false);
+                check(mc.gui.screen() instanceof ModuleSettingsScreen, "Right click opens module settings in Minecraft");
+                var settings = (ModuleSettingsScreen) mc.gui.screen();
+                int settingsX = (settings.width - Math.min(440, settings.width - 24)) / 2;
+                int settingsY = (settings.height - Math.min(360, settings.height - 24)) / 2;
+                settings.mouseClicked(mouse(settingsX + 30, settingsY + 64 + 2 * 34 + 10), false);
+                check(!client.config().flag("armor_status", "background", true), "HUD background can be disabled from module settings");
+                check(!ClientConfig.load(Path.of("config/aurora.properties")).flag("armor_status", "background", true), "Module setting survives config reload");
+                check(client.enabled("armor_status"), "Right click settings preserve module enabled state");
+                settings.onClose();
                 clickPanel(menu, 200, 375);
                 menu.keyPressed(new KeyEvent(InputConstants.KEY_R, 0, 0));
                 check(client.config().menuKey() == InputConstants.KEY_R, "Changed menu binding through native GUI input");
@@ -100,6 +120,12 @@ public final class SmokeCheck {
                 client.config().menuKey(229); client.save();
                 stage = 3; stageTick = ticks;
             } else if (stage == 3 && ticks - stageTick > 30) {
+                client.config().setting("fps_counter", "key", Integer.toString(InputConstants.KEY_H));
+                mc.keyboardHandler.keyPress(mc.getWindow().handle(), 1, new KeyEvent(InputConstants.KEY_H, 0, 0));
+                check(!client.enabled("fps_counter"), "Module hotkey toggles module through keyboard hook");
+                mc.keyboardHandler.keyPress(mc.getWindow().handle(), 1, new KeyEvent(InputConstants.KEY_H, 0, 0));
+                check(client.enabled("fps_counter"), "Module hotkey toggles module back on");
+                client.config().setting("fps_counter", "key", "0");
                 check(mc.player.input.keyPresses.shift(), "Toggle Sneak applied to real player input");
                 check(mc.player.input.keyPresses.sprint(), "Toggle Sprint applied to real player input");
                 check(mc.gameRenderer.mainCamera().getFov() < 35, "Zoom changes real camera FOV");

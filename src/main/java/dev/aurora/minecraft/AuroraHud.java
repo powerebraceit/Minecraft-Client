@@ -47,7 +47,7 @@ public final class AuroraHud {
             int width = Math.min(graphics.guiWidth(), mc.font.width(panel.text) + 16);
             Bounds bounds = place(panel.id, width, 20, graphics, 8, y);
             background(graphics, panel.id, bounds, editing);
-            graphics.text(mc.font, mc.font.plainSubstrByWidth(panel.text, Math.max(0, width - 16)), bounds.x() + 8, bounds.y() + 6, 0xffedf1ff, false);
+            graphics.text(mc.font, mc.font.plainSubstrByWidth(panel.text, Math.max(0, width - 16)), bounds.x() + 8, bounds.y() + 6, 0xffedf1ff, AuroraClient.instance().config().flag(panel.id, "text_shadow", false));
             y += 24;
         }
         if (client.enabled("armor_status")) renderArmor(graphics, editing);
@@ -71,7 +71,7 @@ public final class AuroraHud {
             int rowY = bounds.y() + 4 + i * 24;
             graphics.item(stack, bounds.x() + 8, rowY + 4);
             graphics.itemDecorations(mc.font, stack, bounds.x() + 8, rowY + 4);
-            graphics.text(mc.font, durability(stack), bounds.x() + 30, rowY + 8, durabilityColor(stack), false);
+            graphics.text(mc.font, durability(stack), bounds.x() + 30, rowY + 8, durabilityColor(stack), AuroraClient.instance().config().flag("armor_status", "text_shadow", false));
         }
     }
 
@@ -94,8 +94,11 @@ public final class AuroraHud {
 
     private static void background(GuiGraphicsExtractor graphics, String id, Bounds bounds, boolean editing) {
         MinecraftCanvas canvas = new MinecraftCanvas(graphics, Minecraft.getInstance().font);
-        canvas.roundedRect(bounds.x(), bounds.y(), bounds.width(), bounds.height(), 5, 0xd9111522);
-        canvas.roundedRect(bounds.x(), bounds.y() + 5, 2, bounds.height() - 10, 1, 0xff9b8aff);
+        if (AuroraClient.instance().config().flag(id, "background", true)) {
+            canvas.roundedRect(bounds.x(), bounds.y(), bounds.width(), bounds.height(), 5, 0xd9111522);
+            canvas.roundedRect(bounds.x(), bounds.y() + 5, 2, bounds.height() - 10, 1,
+                AuroraClient.instance().config().number(id, "accent", 0xff9b8aff));
+        }
         if (editing) graphics.outline(bounds.x(), bounds.y(), bounds.width(), bounds.height(), id.equals(dragging) ? 0xffedf1ff : 0xaa9b8aff);
     }
 

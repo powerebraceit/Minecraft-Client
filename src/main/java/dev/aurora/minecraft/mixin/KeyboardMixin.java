@@ -19,6 +19,9 @@ public abstract class KeyboardMixin {
                 && mc.gui.screen() == null && mc.gui.overlay() == null
                 && event.key() == client.config().menuKey()) {
             client.openMenu(); ci.cancel();
+        } else if (client != null && action == 1 && window == mc.getWindow().handle()
+                && mc.gui.screen() == null && mc.gui.overlay() == null && client.moduleKey(event.key())) {
+            ci.cancel();
         }
     }
 }

@@ -5,7 +5,7 @@ lila accenter, fem modulkategorier och sökning över alla kategorier.
 
 ## Ladda ner och installera
 
-1. [Ladda ner aurora-client-1.1.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.1.0/releases/1.1.0/aurora-client-1.1.0.jar).
+1. [Ladda ner aurora-client-1.2.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.2.0/releases/1.2.0/aurora-client-1.2.0.jar).
 2. Installera [Fabric Loader](https://fabricmc.net/use/installer/) **0.20.1 eller senare** för **Minecraft 26.3**.
 3. Lägg JAR-filen i `mods`-mappen för den Minecraft-instans du använder.
    I en vanlig Windows-installation är det `%APPDATA%\.minecraft\mods`.
@@ -20,7 +20,11 @@ med dubbelklick eller `java -jar`.
 
 - Klicka på **Combat, Movement, Render, World eller Misc** för att välja kategori.
 - Skriv i sökfältet för att söka efter namn, beskrivning eller kategori i hela katalogen.
-- Klicka på en modulrad för att slå på eller av modulen. Scrolla för fler resultat.
+- Vänsterklicka på en modulrad för att slå på eller av modulen. Scrolla för fler resultat.
+- **Högerklicka på en modulrad** för att öppna modulens inställningar. Där kan
+  du ändra modulens hotkey. HUD-moduler har dessutom bakgrund, textskugga,
+  accentfärg och återställning av position. Zoom har styrka och mjuk övergång,
+  och chattens tidsstämplar kan visa sekunder. Ändringarna sparas direkt.
 - Klicka på **Menu key … / Change** längst ner och tryck på önskad tangent.
   Escape avbryter tangentbytet. Tangentnamnet visas enligt spelets tangentbordslayout.
 - Höger Shift (eller din nya tangent) stänger menyn. Escape lämnar först sökfältet
@@ -31,6 +35,13 @@ med dubbelklick eller `java -jar`.
 Moduler, menytangent, HUD-positioner och animationsval sparas i `config/aurora.properties`.
 Alla moduler är avstängda vid första starten. För att återställa en glömd
 menytangent, stäng spelet och ta bort raden `menu.key` från konfigurationsfilen.
+
+## Auto Builder: ännu inte spelklar
+
+Version 1.2.0 innehåller högerklicksinställningarna. Den innehåller **inte ännu** en
+spelbar schematic-builder, preview-ankring eller automatisk restock. Material- och
+lagerplaneringen har separata logiktester; Litematica-integrationen återstår.
+Status, avsedd funktion och återstående arbete finns i [Auto Builder](docs/AUTO_BUILDER.md).
 
 ## Flytta HUD-paneler
 
@@ -85,7 +96,7 @@ spel- och resursservrar. Gradle-versionen är låst i wrappern och verifieras me
 ```
 
 På Windows: `gradlew.bat build`. Installationsfilen skapas i
-`build/libs/aurora-client-1.1.0.jar`; filen med `-sources` är källkod.
+`build/libs/aurora-client-1.2.0.jar`; filen med `-sources` är källkod.
 
 ```bash
 ./gradlew runClient     # interaktiv utvecklingsklient
@@ -107,7 +118,8 @@ Testet verifierar även fyra rustningsikoner, dragning via chattens mushändelse
 sparade HUD-positioner, vanlig chattinmatning och ändrad GUI-skala.
 Testet sparar skärmbilder och en resultatfil; Gradle misslyckas om kontrollerna inte slutförs.
 
-Bygget kör även 32 grundkontroller och sex tester för HUD-positioner via JUnit. Speltestet har körts
+Bygget kör även 34 grundkontroller, sex tester för HUD-positioner, två tester för modulinställningar
+och fem tester för byggplanering via JUnit. Speltestet har körts
 lokalt på Minecraft **26.3**, Fabric Loader **0.20.1**, Java **25** och Linux med
 Mesa-mjukvarurendering. Windows, andra modpaket och inloggad multiplayer har inte
 testats i den här miljön.
