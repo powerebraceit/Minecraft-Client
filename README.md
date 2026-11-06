@@ -1,4 +1,4 @@
-# Aurora Client — work in progress
+# Minecraft-Client — Aurora (work in progress)
 
 En Minecraft Java-klient med målversion **26.3**. Designen har en mörk palett,
 lila accentfärg, mjuka animationer och kategorierna **Combat, Movement, Render,
