@@ -17,6 +17,7 @@ public final class BuildSession {
         Map<String, Integer> inventory();
         Stock stock();
         Restock restock(Map<String, Integer> layerRequirements);
+        default Restock restockFor(BuildPlan.Block next,Map<String,Integer> requirements) {return restock(requirements);}
         default boolean preparePlacement(BuildPlan.Block block) { return true; }
         void place(BuildPlan.Block block);
     }
@@ -56,11 +57,11 @@ public final class BuildSession {
         List<BuildPlan.Block> remaining = plan.remaining(driver::placed);
         if (remaining.isEmpty()) { state = State.COMPLETE; status = "Build complete"; return; }
         int layer = remaining.getFirst().y();
-        var layerBlocks = remaining.stream().filter(block -> block.y() == layer).toList();
+        var layerBlocks = remaining.stream().filter(block -> block.y() == layer && BuildPlan.fluid(block)==BuildPlan.fluid(remaining.getFirst())).toList();
         BuildPlan.Block next = layerBlocks.getFirst();
         if (driver.inventory().getOrDefault(next.item(), 0) < next.count()) {
             state = State.RESTOCKING; status = "Restocking layer " + layer;
-            if (driver.restock(BuildPlan.materials(layerBlocks)) == Restock.BLOCKED) pause("Restock unavailable or inventory full");
+            if (driver.restockFor(next,BuildPlan.materials(layerBlocks)) == Restock.BLOCKED) pause("Restock unavailable or inventory full");
             return;
         }
         state = State.BUILDING; status = "Building layer " + layer;

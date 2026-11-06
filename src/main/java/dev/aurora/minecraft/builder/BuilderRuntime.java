@@ -16,6 +16,9 @@ import net.minecraft.world.phys.Vec3;
 
 public final class BuilderRuntime implements BuildSession.Driver {
     private final AuroraClient client;
+    public final BucketActions buckets=new BucketActions();
+    public final WaterSupply water;
+    private BucketActions.Aim bucketAim;
     public final SchematicPreview preview=new SchematicPreview(this);
     private SchematicMaterials materials;
     private String materialsError="Choose a .litematic file first";
@@ -66,15 +69,16 @@ public final class BuilderRuntime implements BuildSession.Driver {
     private final Set<BlockPos> awaiting=new HashSet<>();
     public void confirmed(BlockPos pos,BlockState state) {
         if(awaiting.contains(pos))confirmations.put(pos.immutable(),state);
+        water.confirmed(pos,state);
         if(documentInWorld() && materials!=null)materials.changed(pos,Minecraft.getInstance().level);
     }
     public void inspectChests() { stop("Inspecting chests");level=Minecraft.getInstance().level;restock.startScan(); }
-    private int waitingRevision=-1,swapTicks,moveTicks;
-    public BuilderRuntime(AuroraClient client) { this.client=client;chests=new RestockChests(client);restock=new RestockJob(chests,navigator); }
+    private int moveTicks;
+    public BuilderRuntime(AuroraClient client) { this.client=client;chests=new RestockChests(client);restock=new RestockJob(chests,navigator);water=new WaterSupply(client,navigator,buckets,chests::dimension); }
     public BuildSession.State state() { return session==null?BuildSession.State.IDLE:session.state(); }
-    public String status() { return restock.busy()?restock.status():session==null?message:session.status(); }
+    public String status() { return water.busy()?water.status():restock.busy()?restock.status():session==null?message:session.status(); }
     public boolean controlsInput() {
-        return restock.busy() || session!=null && (session.state()==BuildSession.State.BUILDING || session.state()==BuildSession.State.RESTOCKING);
+        return water.busy() || restock.busy() || session!=null && (session.state()==BuildSession.State.BUILDING || session.state()==BuildSession.State.RESTOCKING);
     }
     public void start() {
         Minecraft mc=Minecraft.getInstance();
@@ -93,18 +97,22 @@ public final class BuilderRuntime implements BuildSession.Driver {
     /** Also accepts an explicit immutable snapshot for the development integration runner. */
     public void startSnapshot(DirectSchematic.Snapshot plan) {
         stop("Preparing build");snapshot=plan;level=Minecraft.getInstance().level;
-        session=new BuildSession(plan.plan());moveTicks=0;waitingRevision=-1;
-        if(BuildPlan.missing(BuildPlan.materials(plan.plan().remaining(this::placed)),inventory()).isEmpty())session.start(this);
+        session=new BuildSession(plan.plan());moveTicks=0;
+        var remaining=plan.plan().remaining(this::placed);
+        water.configure(plan,remaining.stream().filter(b->b.item().equals("minecraft:water_bucket")).count());
+        var missing=new HashMap<>(BuildPlan.missing(BuildPlan.materials(remaining),inventory()));
+        if(water.canSupply())missing.remove("minecraft:water_bucket");
+        if(missing.isEmpty())session.start(this);
         else { restock.startScan();preflight=true; }
     }
     public void stop(String reason) {
-        preflight=false;navigator.stop();restock.cancel(reason);waitingRevision=-1;awaiting.clear();confirmations.clear();secondSlabClick.clear();attempt=null;aimedTarget=null;
+        preflight=false;navigator.stop();restock.cancel(reason);water.cancel();buckets.cancel();bucketAim=null;awaiting.clear();confirmations.clear();secondSlabClick.clear();attempt=null;aimedTarget=null;
         if(session!=null)session.pause(reason);message=reason;
     }
     public void tick() {
         Minecraft mc=Minecraft.getInstance();
         if(mc.player==null || mc.level==null)return;
-        chests.outlines();
+        chests.outlines();water.outlines();
         if(documentInWorld() && materials!=null)materials.tick(mc.level);
         if(controlsInput() && (mc.level!=level || !mc.player.isAlive())) { stop("World changed or player died; restart explicitly");return; }
         if(snapshot!=null && controlsInput()) {
@@ -118,6 +126,8 @@ public final class BuilderRuntime implements BuildSession.Driver {
                 }
             }
         }
+        if(water.busy())water.tick();
+        if(controlsInput() && !water.failure().isEmpty()) {stop(water.failure());return;}
         if(restock.busy())restock.tick();
         if(preflight && !restock.busy()) {
             preflight=false;
@@ -154,7 +164,23 @@ public final class BuilderRuntime implements BuildSession.Driver {
             && snapshot.companions().getOrDefault(pos,List.of()).stream().allMatch(p->mc.level.getBlockState(p)==snapshot.states().get(p));
     }
     @Override public Map<String,Integer> inventory() { return RestockJob.inventory(); }
-    @Override public BuildSession.Stock stock() { return restock.stock(); }
+    @Override public BuildSession.Stock stock() {
+        var stock=restock.stock();if(!water.canSupply())return stock;
+        var items=new HashMap<>(stock.items());items.merge("minecraft:water_bucket",2,Math::max);
+        var own=new HashMap<>(inventory());own.merge("minecraft:water_bucket",2,Math::max);
+        boolean enough=snapshot!=null && BuildPlan.missing(BuildPlan.materials(snapshot.plan().remaining(this::placed)),own).isEmpty();
+        return new BuildSession.Stock(items,stock.inspected() || enough);
+    }
+    @Override public BuildSession.Restock restockFor(BuildPlan.Block next,Map<String,Integer> requirements) {
+        if(next.item().equals("minecraft:water_bucket") && (water.ready() || water.canSupply())) {
+            if(water.busy())return BuildSession.Restock.PENDING;
+            if(!water.ready()) {water.prepare();return BuildSession.Restock.PENDING;}
+            if(inventory().getOrDefault("minecraft:water_bucket",0)>0)return BuildSession.Restock.COMPLETE;
+            water.refill();return BuildSession.Restock.PENDING;
+        }
+        var wanted=new HashMap<>(requirements);if(water.canSupply())wanted.remove("minecraft:water_bucket");
+        return restock(wanted);
+    }
     @Override public BuildSession.Restock restock(Map<String,Integer> requirements) {
         if(restock.busy())return BuildSession.Restock.PENDING;
         if(restock.failed())throw new IllegalStateException(restock.status());
@@ -164,43 +190,41 @@ public final class BuilderRuntime implements BuildSession.Driver {
     }
     @Override public boolean preparePlacement(BuildPlan.Block block) {
         Minecraft mc=Minecraft.getInstance();
-        if(restock.busy())return false;
-        if(mc.gui.screen()!=null)return false;
+        if(restock.busy() || water.busy() || mc.gui.screen()!=null)return false;
+        if(block.item().equals("minecraft:water_bucket")) {
+            int seeds=water.seedBucketsNeeded();
+            if(inventory().getOrDefault("minecraft:water_bucket",0)<seeds) {
+                if(restock.failed())throw new IllegalStateException(restock.status());
+                restock.startRestock(Map.of("minecraft:water_bucket",seeds));return false;
+            }
+            if(!water.prepare())return false;
+        }
         if(++moveTicks>1200)throw new IllegalStateException("Could not reach the next block within 60 seconds");
         BlockPos target=new BlockPos(block.x(),block.y(),block.z());
         if(!mc.level.hasChunkAt(target))throw new IllegalStateException("Target chunk is not loaded");
-        if(!mc.level.getBlockState(target).canBeReplaced() && !placed(block))throw new IllegalStateException("Remove the conflicting block at "+target.toShortString());
+        var actual=mc.level.getBlockState(target);var expected=snapshot.states().get(target);
+        if(SchematicFluids.source(expected) && !actual.getFluidState().isEmpty() && actual.getBlock()!=expected.getBlock())
+            throw new IllegalStateException("Remove the conflicting fluid at "+target.toShortString());
+        if(!actual.canBeReplaced() && !placed(block))throw new IllegalStateException("Remove the conflicting block at "+target.toShortString());
         if(!navigator.walkTo(target,2.7,1.5))return false;
-        if(waitingRevision!=-1) {
-            if(mc.player.inventoryMenu.getStateId()==waitingRevision) {
-                if(++swapTicks>100)throw new IllegalStateException("Inventory swap was not confirmed");
-                return false;
-            }
-            waitingRevision=-1;swapTicks=0;
+        if(!buckets.select(block.item()))return false;
+        if(BuildPlan.fluid(block)) {
+            if(!target.equals(aimedTarget) || bucketAim==null) {bucketAim=BucketActions.find(target,false);aimedTarget=target;aimTicks=2;}
+            bucketAim.aim();if(aimTicks-->0)return false;
+        }else {
+            if(!target.equals(aimedTarget) || attempt==null) {attempt=NativePlacement.find(target,expected);aimedTarget=target;aimTicks=2;}
+            attempt.aim();if(aimTicks-->0)return false;
         }
-        var inv=mc.player.getInventory();
-        for(int i=0;i<36;i++) {
-            if(!inv.getItem(i).isEmpty() && RestockJob.itemId(inv.getItem(i)).equals(block.item())) {
-                if(i<9) {
-                    inv.setSelectedSlot(i);
-                    if(!target.equals(aimedTarget) || attempt==null) {attempt=NativePlacement.find(target,snapshot.states().get(target));aimedTarget=target;aimTicks=2;}
-                    attempt.aim();
-                    if(aimTicks-->0)return false;
-                    moveTicks=0;return true;
-                }
-                waitingRevision=mc.player.inventoryMenu.getStateId();swapTicks=0;
-                mc.gameMode.handleContainerInput(mc.player.inventoryMenu.containerId,i,0,ContainerInput.SWAP,mc.player);
-                return false;
-            }
-        }
-        throw new IllegalStateException("Required material disappeared from inventory");
+        moveTicks=0;return true;
     }
     @Override public void place(BuildPlan.Block block) {
         Minecraft mc=Minecraft.getInstance();BlockPos target=new BlockPos(block.x(),block.y(),block.z());
         awaiting.add(target.immutable());confirmations.remove(target);
         for(BlockPos companion:snapshot.companions().getOrDefault(target,List.of())) {awaiting.add(companion);confirmations.remove(companion);}
-        if(attempt==null)throw new IllegalStateException("No validated placement context");
-        attempt.click();attempt=null;aimedTarget=null;
+        if(BuildPlan.fluid(block)) {
+            if(bucketAim==null)throw new IllegalStateException("No validated bucket ray");bucketAim.use();bucketAim=null;
+        }else {if(attempt==null)throw new IllegalStateException("No validated placement context");attempt.click();attempt=null;}
+        aimedTarget=null;
     }
     public void drawStatus(GuiGraphicsExtractor graphics) {
         Minecraft mc=Minecraft.getInstance();

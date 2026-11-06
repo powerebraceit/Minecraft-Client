@@ -23,7 +23,7 @@ public final class SchematicPreview {
         return expected==actual?Match.CORRECT:actual.isAir()?Match.MISSING:Match.WRONG;
     }
     public record Expected(BlockPos pos,BlockState state) { }
-    public record Ghost(BlockPos pos,Vec3 offset,BlockModelRenderState model,int outlineColor,int opacityColor) { }
+    public record Ghost(BlockPos pos,Vec3 offset,BlockModelRenderState model,int outlineColor,int opacityColor,FluidGhost fluid) { }
     private final BuilderRuntime builder;
     private final Map<ChunkPos,List<Expected>> chunks=new HashMap<>();
     private List<Ghost> lastExtracted=List.of();
@@ -59,8 +59,16 @@ public final class SchematicPreview {
             models.get(expected).update(model,expected,BlockDisplayContext.create(),expected.getSeed(pos));
             var tints=model.tintLayers();tints.clear();
             for(var tint:mc.getBlockColors().getTintSources(expected))tints.add(0xff000000 | tint.colorInWorld(expected,mc.level,pos));
+            FluidGhost fluid=null;
+            if(SchematicFluids.liquid(expected)) {
+                var fluidModel=mc.getModelManager().getFluidStateModelSet().get(expected.getFluidState());
+                int tint=fluidModel.tintSource()==null?0xffffffff:fluidModel.tintSource().colorInWorld(expected,mc.level,pos);
+                var above=builder.document().blocks().get(block.pos().subtract(builder.anchor()).above());
+                float height=above!=null && above.getBlock()==expected.getBlock()?1:expected.getFluidState().getOwnHeight();
+                fluid=new FluidGhost(fluidModel.stillMaterial().sprite(),fluidModel.flowingMaterial().sprite(),tint,height);
+            }
             int color=match(expected,mc.level.getBlockState(pos))==Match.MISSING?MISSING_COLOR:WRONG_COLOR;
-            ghosts.add(new Ghost(pos,expected.getOffset(pos),model,color,(Math.clamp(builder.previewOpacity(),10,90)*255/100<<24)|0xffffff));
+            ghosts.add(new Ghost(pos,expected.getOffset(pos),model,color,(Math.clamp(builder.previewOpacity(),10,90)*255/100<<24)|0xffffff,fluid));
         }
         lastExtracted=List.copyOf(ghosts);target.aurora$ghosts(lastExtracted);
     }
@@ -74,7 +82,8 @@ public final class SchematicPreview {
             pose.pushPose();pose.translate(ghost.offset());
             // Slight expansion keeps the intended model visible at a conflicting block's outer faces.
             pose.translate(-0.001,-0.001,-0.001);pose.scale(1.002f,1.002f,1.002f);
-            ghost.model().submit(pose,specialOutput,0xf000f0,OverlayTexture.NO_OVERLAY,0);
+            if(ghost.fluid()!=null)ghost.fluid().submit(pose,output,ghost.opacityColor());
+            else ghost.model().submit(pose,specialOutput,0xf000f0,OverlayTexture.NO_OVERLAY,0);
             pose.popPose();
             pose.translate(-0.003,-0.003,-0.003);pose.scale(1.006f,1.006f,1.006f);
             output.submitShapeOutline(pose,Shapes.block(),RenderTypes.linesTranslucentNoDepthWrite(),ghost.outlineColor(),1.5f,false);

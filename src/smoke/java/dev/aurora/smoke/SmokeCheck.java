@@ -41,7 +41,9 @@ public final class SmokeCheck {
     private static net.minecraft.core.BlockPos buildBase, chestPos, pairPos, pairOther;
     private static net.minecraft.world.phys.Vec3 builderStart;
     private static java.util.List<dev.aurora.core.builder.BuildPlan.Block> fixtureBlocks;
-    private static Path schematicFile;
+    private static Path schematicFile,fluidFile;
+    private static net.minecraft.core.BlockPos fluidBase,sourcePool;
+    private static java.util.List<dev.aurora.core.builder.BuildPlan.Block> fluidBlocks;
     private static net.minecraft.core.BlockPos previewAnchor;
     private static dev.aurora.minecraft.builder.SchematicFileScreen fileScreen;
     private static final Path RESULT = Path.of("aurora-smoke-result.txt");
@@ -372,11 +374,33 @@ public final class SmokeCheck {
                 stage = 11; stageTick = ticks;
             } else if (stage == 11 && client.builder().state() == dev.aurora.core.builder.BuildSession.State.MISSING_MATERIALS) {
                 check(fixtureBlocks.stream().noneMatch(client.builder()::placed), "Insufficient total materials prevent any new placement");
+                client.builder().stop("Solid builder checks complete");
+                setupFluidFixture(mc,client);stage=40;stageTick=ticks;
+            } else if(stage==40 && fixtureReady && ticks-stageTick>15 && mc.player.blockPosition().equals(fluidBase)) {
+                fluidFile=writeFluidFile();
+                client.builder().load(dev.aurora.minecraft.builder.DirectSchematic.read(fluidFile));
+                check(client.builder().anchor().equals(fluidBase),"Fluid file corner uses the actual player position");
+                var snapshot=client.builder().document().at(client.builder().anchor());fluidBlocks=snapshot.plan().blocks();
+                check(fluidBlocks.size()==6 && snapshot.states().values().stream().anyMatch(state->state.is(net.minecraft.world.level.block.Blocks.IRON_CHAIN)),"Legacy minecraft:chain in a real file resolves to iron_chain");
+                check(dev.aurora.core.builder.BuildPlan.materials(fluidBlocks).equals(java.util.Map.of("minecraft:iron_chain",1,"minecraft:water_bucket",2,"minecraft:lava_bucket",2)),"Actual file checklist caps three water sources at two buckets and counts both lava buckets");
+                check(client.builder().inventory().getOrDefault("minecraft:water_bucket",0)==2 && client.builder().inventory().getOrDefault("minecraft:lava_bucket",0)==1,"Survival fixture starts with only two water buckets and one lava bucket");
+                mc.gui.setScreen(new dev.aurora.minecraft.builder.MaterialListScreen(null,client));stage=41;stageTick=ticks;
+            } else if(stage==41 && ticks-stageTick>20) {
+                check(client.builder().preview.ghosts().stream().filter(g->g.fluid()!=null).count()==5,"Water and lava previews use the actual native fluid textures");
+                capture("aurora-fluid-materials.png");mc.gui.setScreen(null);
+                client.modules().get("auto_builder").setEnabled(true);stage=42;stageTick=ticks;
+            } else if(stage==42 && client.builder().state()==dev.aurora.core.builder.BuildSession.State.COMPLETE) {
+                check(fluidBlocks.stream().allMatch(client.builder()::placed),"Server confirmed the legacy chain, three water sources and two lava sources");
+                check(dev.aurora.minecraft.builder.WaterPool.ready(mc.level,sourcePool),"Two water buckets created a glass 2x2 pool that remains infinite after repeated refills");
+                check(client.builder().inventory().getOrDefault("minecraft:bucket",0)==4 && client.builder().inventory().getOrDefault("minecraft:water_bucket",0)==0 && client.builder().inventory().getOrDefault("minecraft:lava_bucket",0)==0,"All four physical buckets remain as empty buckets; no extra water or lava buckets were supplied");
+                check(client.builder().inventory().getOrDefault("minecraft:iron_chain",0)==0,"Legacy chain was placed in survival and its item consumed");
+                capture("aurora-fluid-build.png");client.modules().get("auto_builder").setEnabled(false);
                 client.builder().stop("Smoke test complete");
-                Files.writeString(RESULT, "PASS: Standalone .litematic file selected in the local file picker, decoded and anchored with G, previewed with textured translucent models, red/yellow/correct/mined state transitions and live material HUD/list, and built in survival without Litematica/MaLiLib. Restock, server-confirmed layers, oriented stairs, double slabs, inventory consumption and missing-material gate passed. UI/HUD/settings regressions passed.\n");
-                finished = true;
-                AuroraClient.LOG.info("AURORA SMOKE COMPLETE: PASS");
-                mc.stop();
+                Files.writeString(RESULT,"PASS: Native Minecraft 26.3 survival tests verified file picker, textured previews with pixel comparisons, material HUD/list, chest restock and ordinary block placement. A real legacy-chain file built iron_chain, three water sources and two lava sources. Only two water buckets seeded a contained 2x2 infinite pool; refills and regeneration were server-confirmed, the second lava bucket came from a restock chest, and all four empty buckets remained. Missing-material gate and existing UI/HUD tests passed.\n");
+                finished=true;AuroraClient.LOG.info("AURORA SMOKE COMPLETE: PASS");mc.stop();
+            } else if(stage==42 && (client.builder().state()==dev.aurora.core.builder.BuildSession.State.PAUSED || client.builder().state()==dev.aurora.core.builder.BuildSession.State.MISSING_MATERIALS)) {
+                throw new AssertionError("Fluid builder stopped: "+client.builder().status()+"; pool="+client.builder().water.status()+"; inventory="+client.builder().inventory());
+
             }
         } catch (Throwable error) {
             finished = true;
@@ -384,6 +408,45 @@ public final class SmokeCheck {
             try { Files.writeString(RESULT, "FAIL: " + error + "\n"); } catch (Exception ignored) { }
             mc.stop();
         }
+    }
+
+    private static void setupFluidFixture(Minecraft mc,AuroraClient client) {
+        fluidBase=buildBase.offset(10,-1,0);sourcePool=buildBase.offset(4,-1,5);fixtureReady=false;
+        client.builder().water.clearBinding();var uuid=mc.player.getUUID();
+        mc.getSingleplayerServer().execute(()->{
+            var server=mc.getSingleplayerServer();var world=server.overworld();var player=server.getPlayerList().getPlayer(uuid);
+            player.setGameMode(GameType.SURVIVAL);player.getInventory().clearContent();
+            player.getInventory().setItem(9,new ItemStack(Items.WATER_BUCKET));player.getInventory().setItem(10,new ItemStack(Items.WATER_BUCKET));
+            player.getInventory().setItem(11,new ItemStack(Items.LAVA_BUCKET));player.getInventory().setItem(18,new ItemStack(net.minecraft.world.level.block.Blocks.IRON_CHAIN));
+            for(int x:new int[]{0,2,4,6,8}) {
+                var p=fluidBase.offset(x,0,0);world.setBlockAndUpdate(p.below(),net.minecraft.world.level.block.Blocks.GLASS.defaultBlockState());
+                for(var side:java.util.List.of(net.minecraft.core.Direction.NORTH,net.minecraft.core.Direction.SOUTH,net.minecraft.core.Direction.EAST,net.minecraft.core.Direction.WEST))world.setBlockAndUpdate(p.relative(side),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+                world.setBlockAndUpdate(p,net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());world.setBlockAndUpdate(p.above(),net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+            }
+            for(int x=-1;x<=2;x++)for(int z=-1;z<=2;z++) {
+                var p=sourcePool.offset(x,0,z);world.setBlockAndUpdate(p.below(),net.minecraft.world.level.block.Blocks.GLASS.defaultBlockState());
+                world.setBlockAndUpdate(p,x>=0 && x<=1 && z>=0 && z<=1?net.minecraft.world.level.block.Blocks.AIR.defaultBlockState():net.minecraft.world.level.block.Blocks.GLASS.defaultBlockState());
+                world.setBlockAndUpdate(p.above(),net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+            }
+            var chain=fluidBase.offset(0,1,3);world.setBlockAndUpdate(chain.below(),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());world.setBlockAndUpdate(chain,net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+            var chest=(net.minecraft.world.level.block.entity.ChestBlockEntity)world.getBlockEntity(chestPos);
+            for(int i=0;i<27;i++)chest.setItem(i,ItemStack.EMPTY);chest.setItem(0,new ItemStack(Items.LAVA_BUCKET));chest.setChanged();
+            player.inventoryMenu.broadcastChanges();player.teleportTo(fluidBase.getX()+0.5,fluidBase.getY(),fluidBase.getZ()+0.5);fixtureReady=true;
+        });
+    }
+    private static Path writeFluidFile() throws Exception {
+        var root=new net.minecraft.nbt.CompoundTag();root.putInt("Version",6);
+        var meta=new net.minecraft.nbt.CompoundTag();meta.putString("Name","Legacy chain and bucket fluids");root.put("Metadata",meta);
+        var region=new net.minecraft.nbt.CompoundTag();var pos=new net.minecraft.nbt.CompoundTag();pos.putInt("x",0);pos.putInt("y",0);pos.putInt("z",0);region.put("Position",pos);
+        var size=new net.minecraft.nbt.CompoundTag();size.putInt("x",9);size.putInt("y",2);size.putInt("z",4);region.put("Size",size);
+        var palette=new net.minecraft.nbt.ListTag();
+        for(var state:java.util.List.of(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),net.minecraft.world.level.block.Blocks.WATER.defaultBlockState(),net.minecraft.world.level.block.Blocks.LAVA.defaultBlockState()))palette.add(net.minecraft.nbt.NbtUtils.writeBlockState(state));
+        var chain=new net.minecraft.nbt.CompoundTag();chain.putString("Name","minecraft:chain");var props=new net.minecraft.nbt.CompoundTag();props.putString("axis","y");props.putString("waterlogged","false");chain.put("Properties",props);palette.add(chain);
+        region.put("BlockStatePalette",palette);long[] data=new long[(9*2*4*2+63)/64];
+        for(int x:new int[]{0,2,4,6,8}) {int offset=x*2;data[offset/64]|=(x<6?1L:2L)<<(offset%64);}
+        int offset=((1*4+3)*9)*2;data[offset/64]|=3L<<(offset%64);region.putLongArray("BlockStates",data);
+        var regions=new net.minecraft.nbt.CompoundTag();regions.put("sources",region);root.put("Regions",regions);
+        Path file=schematicFile.getParent().resolve("legacy chain and fluids.litematic");net.minecraft.nbt.NbtIo.writeCompressed(root,file);return file;
     }
 
     private static void verifyTexturePixels(String withPreview,String withoutPreview) throws Exception {

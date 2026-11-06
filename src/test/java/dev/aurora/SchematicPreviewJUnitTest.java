@@ -61,7 +61,7 @@ class SchematicPreviewJUnitTest {
     }
     @Test void unsupportedAutomaticPlacementDoesNotHideTheSelectedFilesMaterials() {
         var pos=BlockPos.ZERO;
-        var selected=document(Map.of(pos,Blocks.STONE.defaultBlockState(),pos.above(),Blocks.WATER.defaultBlockState()));
+        var selected=document(Map.of(pos,Blocks.STONE.defaultBlockState(),pos.above(),Blocks.MOVING_PISTON.defaultBlockState()));
         assertThrows(IllegalStateException.class,()->selected.at(BlockPos.ZERO));
         var materials=new SchematicMaterials(selected,BlockPos.ZERO);materials.tick(new World());
         assertEquals(2,materials.rows().size());

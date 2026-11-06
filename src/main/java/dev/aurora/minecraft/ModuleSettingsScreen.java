@@ -64,6 +64,9 @@ public final class ModuleSettingsScreen extends Screen {
                 int current=builder.previewOpacity();int next=current<40?40:current<55?55:current<70?70:current<85?85:25;
                 client.config().setting("auto_builder","preview_opacity",Integer.toString(next));
             });
+            row(() -> "Water pool: "+builder.water.status(),()->{});
+            row(() -> "Use water pool corner at your feet",()->{builder.stop("Water pool binding changed");builder.water.bindAtFeet();});
+            row(() -> "Clear water pool binding",()->{builder.stop("Water pool binding cleared");builder.water.clearBinding();});
             actionKey("Corner key", "anchor_key", 10);
             actionKey("Bind restock chest key", "restock_key", 25);
             row(() -> "Restock chests: " + (minecraft.level == null ? 0 : builder.chests.current().size()), () -> { });

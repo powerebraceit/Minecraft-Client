@@ -32,7 +32,9 @@ public final class SchematicMaterials {
         }
         for(var e:world.entrySet()) {
             if(generated.contains(e.getKey()))continue;
-            var state=e.getValue();var item=state.getBlock().asItem();
+            var state=e.getValue();
+            if(SchematicFluids.liquid(state) && !SchematicFluids.source(state))continue;
+            var item=SchematicFluids.source(state)?(state.is(Blocks.WATER)?Items.WATER_BUCKET:Items.LAVA_BUCKET):state.getBlock().asItem();
             boolean manual=item==Items.AIR;
             String id=manual?"":BuiltInRegistries.ITEM.getKey(item).toString();
             String key=manual?"block:"+BuiltInRegistries.BLOCK.getKey(state.getBlock()):id;
@@ -56,9 +58,10 @@ public final class SchematicMaterials {
         if(state.getBlock() instanceof BedBlock && state.getValue(BedBlock.PART)==BedPart.HEAD)return pos.relative(state.getValue(BedBlock.FACING).getOpposite());
         return null;
     }
-    public List<Row> rows() {return totals.entrySet().stream().map(e->{var r=e.getValue();return new Row(r.item(),r.name(),r.total(),remaining.getOrDefault(e.getKey(),0),r.manual());}).toList();}
-    public int remainingItems() {return remaining.values().stream().mapToInt(Integer::intValue).sum();}
-    public int totalItems() {return totals.values().stream().mapToInt(Row::total).sum();}
+    public List<Row> rows() {return totals.entrySet().stream().map(e->{var r=e.getValue();return new Row(r.item(),r.name(),cap(r.item(),r.total()),cap(r.item(),remaining.getOrDefault(e.getKey(),0)),r.manual());}).toList();}
+    public int remainingItems() {return rows().stream().mapToInt(Row::remaining).sum();}
+    public int totalItems() {return rows().stream().mapToInt(Row::total).sum();}
+    private static int cap(String item,int count) {return item.equals("minecraft:water_bucket")?Math.min(2,count):count;}
     public boolean hasManualBlocks() {return totals.values().stream().anyMatch(Row::manual);}
     public void changed(BlockPos pos,BlockGetter world) {var index=indices.get(pos);if(index!=null)refresh(index,world);}
     public void tick(BlockGetter world) {

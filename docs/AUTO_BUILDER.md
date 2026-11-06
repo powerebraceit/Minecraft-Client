@@ -55,16 +55,49 @@ igen så att det laddade schemat och dess lista blir synliga. Sparad HUD-positio
 behålls.
 
 Listan byggs direkt från den valda filen och är oberoende av byggplanens krav.
-Ett block utan direkt föremål, exempelvis vatten, får en manuell blockrad märkt
-`*` och räknas som block, inte som antal hinkar. Det hindrar inte övriga material
-från att visas. Automatiskt byggande gör fortfarande sin egen kontroll av vilka
-block det kan placera.
+Vatten- och lavakällor visas med respektive hinkikon. Vatten visar högst två
+vattenhinkar, lava visar en hink per källblock som återstår. Flytande vätska kostar
+inte extra hinkar. Andra block utan direkt föremål visas fortfarande som manuella
+blockrader med `*`; de döljer inte övriga material.
 
 Listan följer placeringar och borttagningar i världen. För stora scheman sprids
 kontrollen över flera ticks; serverns enskilda blockuppdateringar uppdaterar den
 berörda posten direkt. En befintlig enkel slab minskar materialbehovet för en
 dubbel slab till ett föremål. Överdelar av dörrar och sängars huvud räknas inte
 som egna extra föremål.
+
+## Vatten, lava och återfyllning
+
+Från **1.6.0** placerar byggaren vanliga vatten- och lavakällor genom spelets
+vanliga hinkanvändning. Alla vanliga byggblock färdigställs först, lager för lager.
+Därefter placeras vätskorna lager för lager, så att golv och inneslutning finns
+innan vätskan hälls ut. Källblock räknas som hinkar; flödesblock skapas av spelets
+vätskesimulering. Ta med källorna när du exporterar schemat.
+
+För fler än två återstående vattenkällor behövs en återfyllningspool:
+
+1. Förbered en **2×2-bassäng, en block djup**, med hela fasta block som botten och
+   väggar. Sten eller glas fungerar. Poolens fyra vattenplatser ska vara fria, med luft
+   ovanför. En befintlig grund 2×2-pool med fyra vattenkällor fungerar också.
+2. Lägg poolen utanför schemats område, inom 12 block från spelaren vid byggstart.
+   Byggaren söker efter en lämplig pool automatiskt och gräver inga hål åt dig.
+3. För en annan plats: stå i poolens hörn med lägst X/Z, öppna Auto Builder och
+   välj **Use water pool corner at your feet**. De andra platserna ligger åt öster
+   och söder. Bindningen sparas för världen/dimensionen. **Clear water pool
+   binding** återgår till automatisk sökning.
+4. Ha högst två vattenhinkar som startmaterial. Klienten placerar dem i diagonala
+   hörn, väntar på fyra källor och fyller därefter tomma hinkar från en återskapande
+   plats. Efter varje påfyllning krävs både serverns inventory-uppdatering och
+   att poolens källa återskapas innan arbetet fortsätter.
+
+Lava återfylls från dina registrerade restock-kistor och förbrukar en fylld hink
+per källblock. Tomma hinkar behålls. Byggaren använder ingen oändlig lavakälla.
+
+Poolen måste vara nåbar och innesluten. Om vatten avdunstar där det ska placeras,
+om poolen skadas, om servern nekar en åtgärd eller om serverns regler hindrar
+vattenkällor från att återskapas pausas bygget. Inga extra hinkar skapas av
+klienten. Vattenfyllda block med egenskapen `waterlogged` använder fortfarande den
+vanliga blockplacerarens krav; denna funktion gäller separata vätskekällor.
 
 ## Material och lager
 
@@ -88,7 +121,8 @@ som egna extra föremål.
 
 Läsaren stöder `.litematic`-formatversion **5, 6 och 7**, negativa regionstorlekar,
 flera regioner och både klassisk och modern blockpalett. Blocknamn och properties
-måste vara giltiga i Minecraft 26.3. Äldre block konverteras inte automatiskt.
+måste vara giltiga i Minecraft 26.3. Äldre block konverteras inte generellt. Det gamla namnet `minecraft:chain`
+översätts till `minecraft:iron_chain`, med blockets egenskaper bevarade.
 `.schem` och `.schematic` stöds inte. Överlappande regioner nekas, även om en av
 regionerna har luft i överlappningen. Endast blockmönstret används; entiteter,
 inventarieinnehåll och block entity-NBT kopieras inte.
@@ -118,12 +152,18 @@ i två lager i survival. Kistbindning, sparad färg, dubbelkisteidentitet, fysis
 gång, serverns inventory, faktisk restock, materialkonsumtion och spärren vid
 saknade material verifieras också.
 
-Läsarens sex enhetstester täcker bland annat negativa dimensioner, packade bitar
+Läsarens sju enhetstester täcker bland annat negativa dimensioner, packade bitar
 över long-gränser, flera regioner, felaktiga filer, klassisk blockpalett och
-materialantal för dörrar/dubbla slabs. Dörrar och sängar har inte speltestats.
+materialantal för dörrar/dubbla slabs. Dörrar och sängar har inte speltestats. Vätsketestet bygger tre vattenkällor
+med endast två vattenhinkar via en återskapande pool, två lavakällor och en kedja
+från en fil med det gamla namnet `chain`. Det kontrollerar även de tomma hinkarna
+och den verkliga hämtningen av en lavahink från en restock-kista.
 Sex ytterligare enhetstester täcker färgklassificering, materialändring vid
 placering/borttagning, delvis placerade dubbla slabs, dörröverdelar, vatten i en blandad fil och byte av
 valt schema. Speltestet jämför dessutom bilder med preview på/av och kontrollerar
 att blockytans inre pixlar faktiskt ritas i vanligt och förbättrat transparensläge.
 Testerna har körts på Linux med Java 25 och Fabric Loader 0.20.1. Windows, inloggad
 multiplayer och andra modkombinationer har inte verifierats i den här miljön.
+
+Vätskornas sju enhetstester kontrollerar hinkantal, källor/flöden, byggordning,
+uppdaterade materialantal och säkra bassänger med sten eller glas.

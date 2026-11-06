@@ -78,4 +78,19 @@ public final class DirectSchematicJUnitTest {
         assertEquals(Map.of("minecraft:oak_door",1,"minecraft:stone_slab",2),dev.aurora.core.builder.BuildPlan.materials(snapshot.plan().blocks()));
         assertEquals(List.of(new BlockPos(10,5,10)),snapshot.companions().get(new BlockPos(10,4,10)));
     }
+    @Test void oldChainNameBecomesIronChainWithoutLosingAxisOrWaterlogging() throws Exception {
+        for(String nameKey:List.of("Name","id")) {
+            var r=region(pos(0,0,0),pos(1,1,1),List.of(Blocks.STONE.defaultBlockState()),0);
+            var entry=new CompoundTag();entry.putString(nameKey,"minecraft:chain");
+            var properties=new CompoundTag();properties.putString("axis","x");properties.putString("waterlogged","true");
+            entry.put(nameKey.equals("Name")?"Properties":"properties",properties);
+            var palette=new ListTag();palette.add(entry);r.put("BlockStatePalette",palette);
+            var regions=new CompoundTag();regions.put("chain",r);
+            var state=DirectSchematic.read(write(6,regions)).blocks().get(BlockPos.ZERO);
+            assertTrue(state.is(Blocks.IRON_CHAIN));
+            assertEquals(net.minecraft.core.Direction.Axis.X,state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.AXIS));
+            assertTrue(state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED));
+        }
+    }
+
 }

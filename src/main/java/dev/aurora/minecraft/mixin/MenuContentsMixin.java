@@ -12,6 +12,10 @@ public abstract class MenuContentsMixin {
     @Inject(method="initializeContents",at=@At("TAIL"))
     private void aurora$contents(int stateId,List<ItemStack> items,ItemStack carried,CallbackInfo ci) {
         var client=AuroraClient.instance();
-        if(client!=null && client.builder()!=null)client.builder().restock.contents((AbstractContainerMenu)(Object)this);
+        if(client!=null && client.builder()!=null) {
+            var menu=(AbstractContainerMenu)(Object)this;client.builder().restock.contents(menu);
+            var mc=net.minecraft.client.Minecraft.getInstance();
+            if(mc.player!=null && menu==mc.player.inventoryMenu)for(int slot=9;slot<Math.min(45,items.size());slot++)client.builder().buckets.confirmedInventory(slot>=36?slot-36:slot,items.get(slot));
+        }
     }
 }

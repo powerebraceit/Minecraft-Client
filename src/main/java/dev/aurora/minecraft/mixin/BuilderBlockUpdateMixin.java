@@ -19,4 +19,16 @@ public abstract class BuilderBlockUpdateMixin {
         var client=AuroraClient.instance();
         if(client!=null)packet.runUpdates(client.builder()::confirmed);
     }
+    @Inject(method="handleSetPlayerInventory",at=@At("TAIL"))
+    private void aurora$inventory(net.minecraft.network.protocol.game.ClientboundSetPlayerInventoryPacket packet,CallbackInfo ci) {
+        var client=AuroraClient.instance();if(client!=null && client.builder()!=null)client.builder().buckets.confirmedInventory(packet.slot(),packet.contents());
+    }
+    @Inject(method="handleContainerSetSlot",at=@At("TAIL"))
+    private void aurora$inventorySlot(net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket packet,CallbackInfo ci) {
+        var client=AuroraClient.instance();if(client==null || client.builder()==null)return;
+        int slot=packet.getSlot();
+        if(packet.getContainerId()==0 && slot>=36 && slot<=44)client.builder().buckets.confirmedInventory(slot-36,packet.getItem());
+        else if(packet.getContainerId()==0 && slot>=9 && slot<=35 || packet.getContainerId()==-2)client.builder().buckets.confirmedInventory(slot,packet.getItem());
+    }
+
 }

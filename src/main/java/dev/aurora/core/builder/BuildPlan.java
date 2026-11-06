@@ -22,15 +22,17 @@ public final class BuildPlan {
         if (blocks.size() > 262144) throw new IllegalArgumentException("Schematic exceeds the 262144-block planning limit");
         Set<String> positions = new HashSet<>();
         for (Block b : blocks) if (!positions.add(b.x + "," + b.y + "," + b.z)) throw new IllegalArgumentException("Overlapping schematic blocks");
-        this.blocks = blocks.stream().sorted(Comparator.comparingInt(Block::y).thenComparingInt(Block::z).thenComparingInt(Block::x)).toList();
+        this.blocks = blocks.stream().sorted(Comparator.comparingInt((Block b)->fluid(b)?1:0).thenComparingInt(Block::y).thenComparingInt(Block::z).thenComparingInt(Block::x)).toList();
     }
     public List<Block> blocks() { return blocks; }
     public List<Block> remaining(Predicate<Block> placed) { return blocks.stream().filter(b -> !placed.test(b)).toList(); }
     public static Map<String, Integer> materials(List<Block> blocks) {
         Map<String, Integer> result = new TreeMap<>();
         for (Block block : blocks) result.merge(block.item, block.count, Math::addExact);
+        result.computeIfPresent("minecraft:water_bucket",(item,count)->Math.min(2,count));
         return Map.copyOf(result);
     }
+    public static boolean fluid(Block block) {return block.item.equals("minecraft:water_bucket") || block.item.equals("minecraft:lava_bucket");}
     public static Map<String, Integer> missing(Map<String, Integer> required, Map<String, Integer> available) {
         Map<String, Integer> result = new TreeMap<>();
         required.forEach((item, amount) -> { int shortfall = amount - Math.max(0, available.getOrDefault(item, 0)); if (shortfall > 0) result.put(item, shortfall); });

@@ -5,7 +5,7 @@ lila accenter, fem modulkategorier och sökning över alla kategorier.
 
 ## Ladda ner och installera
 
-1. [Ladda ner aurora-client-1.5.1.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.5.1/releases/1.5.1/aurora-client-1.5.1.jar).
+1. [Ladda ner aurora-client-1.6.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.6.0/releases/1.6.0/aurora-client-1.6.0.jar).
 2. Installera [Fabric Loader](https://fabricmc.net/use/installer/) **0.20.1 eller senare** för **Minecraft 26.3**.
 3. Lägg JAR-filen i `mods`-mappen för den Minecraft-instans du använder.
    I en vanlig Windows-installation är det `%APPDATA%\.minecraft\mods`.
@@ -67,12 +67,27 @@ Du kan flytta panelen med chatten öppen. Högerklicka Auto Builder och välj
 **Have** och **Missing**. **Have** räknar spelarens huvudinventory och hotbar. **Materials HUD**
 slår av/på den kompakta listan; **Background** ändrar dess bakgrund. När du väljer
 en ny fil visas preview och material-HUD automatiskt igen. Materiallistan är
-oberoende av byggplanen: exempelvis vatten får en rad märkt `*` för manuellt
-arbete och döljer inte övriga material.
+oberoende av byggplanen och döljs inte av block som kräver manuellt arbete.
+
+**Vatten och lava:** materiallistan visar hinkikoner. Vatten kräver högst två
+vattenhinkar; lava kräver en lavahink per återstående källblock. Flytande vätska
+räknas inte som extra hinkar. Vid fler än två vattenkällor använder byggaren en
+återfyllningspool. Förbered en tät, en block djup **2×2-bassäng med fast botten**
+utanför schemat, inom 12 block. Klienten fyller två diagonala hörn och återanvänder
+tomma hinkar först efter att servern bekräftat att vattnet återskapas. En befintlig
+motsvarande vattenpool fungerar också. Du kan välja poolens hörn i inställningarna
+med **Use water pool corner at your feet**. Läs [vätskeguiden](docs/AUTO_BUILDER.md).
+
+Äldre `.litematic`-filer med blocknamnet `minecraft:chain` läses nu som
+`minecraft:iron_chain`, med riktning och vatteninställning bevarade.
 
 ![Texturerade block med röda/gula ramar och materiallista](docs/minecraft-schematic-preview.png)
 
 ![Fullständig materiallista](docs/minecraft-material-list.png)
+
+![Hinkantal och äldre kedjefil i survival-testet](docs/minecraft-fluid-materials.png)
+
+![Vätskebyggande under survival-testet](docs/minecraft-fluid-build.png)
 
 ![Välj en lokal .litematic-fil i Minecraft](docs/minecraft-file-picker.png)
 
@@ -132,7 +147,7 @@ spel- och resursservrar. Gradle-versionen är låst i wrappern och verifieras me
 ```
 
 På Windows: `gradlew.bat build`. Installationsfilen skapas i
-`build/libs/aurora-client-1.5.1.jar`; filen med `-sources` är källkod.
+`build/libs/aurora-client-1.6.0.jar`; filen med `-sources` är källkod.
 
 ```bash
 ./gradlew runClient     # interaktiv utvecklingsklient
@@ -155,13 +170,17 @@ sparade HUD-positioner, vanlig chattinmatning och ändrad GUI-skala.
 Testet sparar skärmbilder och en resultatfil; Gradle misslyckas om kontrollerna inte slutförs.
 
 Bygget kör även 34 grundkontroller, sex tester för HUD-positioner, två tester för modulinställningar,
-sju tester för byggplanering, tre tester för gångvägar, sex tester för `.litematic`-läsaren och sex tester för preview/materialantal via JUnit.
+sju tester för byggplanering, tre tester för gångvägar, sju tester för `.litematic`-läsaren, sex tester för preview/materialantal och sju vätsketester via JUnit.
 Speltestet verifierar dessutom filval, avbruten filväljare, texturerad preview,
 röda/gula ramar, döljning av rätt placerade block, återvisning efter borttagning,
 materiallistor, flyttning av material-HUD och G-ankring. Bildkontroller jämför
 pixlar inne på blockytan med preview på/av i både vanligt och förbättrat
 transparensläge. Tester för blandade scheman med vatten och byte av vald fil körs också, liksom
-restock och ett faktiskt survival-bygge i två lager med trappa och dubbel slab. Speltestet har körts
+restock och ett faktiskt survival-bygge i två lager med trappa och dubbel slab. Ett separat survival-moment laddar en
+äldre kedjefil och bygger en kedja, tre vattenkällor och två lavakällor. Det
+kontrollerar att endast två vattenhinkar räcker via pool/påfyllning, att en
+lavahink hämtas från restock-kistan och att fyra tomma hinkar finns kvar efteråt.
+Speltestet har körts
 lokalt på Minecraft **26.3**, Fabric Loader **0.20.1**, Java **25** och Linux med
 Mesa-mjukvarurendering. Windows, andra modpaket och inloggad multiplayer har inte
 testats i den här miljön.

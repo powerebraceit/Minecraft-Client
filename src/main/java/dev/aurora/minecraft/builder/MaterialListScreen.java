@@ -44,7 +44,7 @@ public final class MaterialListScreen extends Screen {
                 int[] counts={row.total(),row.remaining(),have,missing};
                 for(int col=0;col<4;col++)canvas.text(Integer.toString(counts[col]),start+col*49,y+7,9,col==3 && missing>0?0xffffce7a:row.remaining()==0?0xff8cdea4:0xffedf1ff);
             }
-            String footer=!notice.isBlank()?notice:builder.materials().hasManualBlocks()?"* Manual block count; automatic placement is unavailable. Other materials are still listed.":"Left: "+builder.materials().remainingItems()+" | Have: main inventory | Scroll for more";
+            String footer=!notice.isBlank()?notice:builder.materials().hasManualBlocks()?"* Manual block count; automatic placement is unavailable. Other materials are still listed.":builder.materials().rows().stream().anyMatch(r->r.item().equals("minecraft:water_bucket") || r.item().equals("minecraft:lava_bucket"))?"Water: max 2 seed buckets + refill pool. Lava: one bucket per source.":"Left: "+builder.materials().remainingItems()+" | Have: main inventory | Scroll for more";
             canvas.text(font.plainSubstrByWidth(footer,width-24),12,height-42,8,0xffb5accf);
         }
         super.extractRenderState(graphics,mouseX,mouseY,partialTick);

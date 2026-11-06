@@ -76,7 +76,10 @@ public record DirectSchematic(String name, Path file, Map<BlockPos,BlockState> b
     private static int coordinate(CompoundTag tag,String name) throws IOException { return tag.getInt(name).orElseThrow(()->new IOException("Missing coordinate "+name)); }
     private static BlockState state(CompoundTag tag) throws IOException {
         String name=tag.getString("Name").or(()->tag.getString("id")).orElseThrow(()->new IOException("Palette entry has no block name"));
-        Block block=BuiltInRegistries.BLOCK.getOptional(Identifier.parse(name)).orElseThrow(()->new IOException("Unknown block in this Minecraft version: "+name));
+        Identifier blockId=Identifier.parse(name);
+        // Vanilla renamed the original chain when copper chains were added.
+        if(blockId.equals(Identifier.parse("minecraft:chain")))blockId=Identifier.parse("minecraft:iron_chain");
+        Block block=BuiltInRegistries.BLOCK.getOptional(blockId).orElseThrow(()->new IOException("Unknown block in this Minecraft version: "+name));
         BlockState state=block.defaultBlockState();
         CompoundTag props=tag.getCompound("Properties").orElseGet(()->tag.getCompoundOrEmpty("properties"));
         for(String key:props.keySet()) {
@@ -101,10 +104,19 @@ public record DirectSchematic(String name, Path file, Map<BlockPos,BlockState> b
                 if(!world.containsKey(parent) || world.get(parent).getBlock()!=state.getBlock())throw new IllegalStateException("Missing lower/foot part at "+pos.toShortString());
                 companions.computeIfAbsent(parent,p->new ArrayList<>()).add(pos);continue;
             }
+            if(SchematicFluids.liquid(state)) {
+                if(SchematicFluids.source(state))plan.add(new BuildPlan.Block(pos.getX(),pos.getY(),pos.getZ(),SchematicFluids.item(state),1,state.toString()));
+                continue;
+            }
             var item=state.getBlock().asItem();
             if(!(item instanceof BlockItem))throw new IllegalStateException("No supported block item for "+state);
             int count=state.getBlock() instanceof SlabBlock && state.getValue(SlabBlock.TYPE)==SlabType.DOUBLE?2:1;
             plan.add(new BuildPlan.Block(pos.getX(),pos.getY(),pos.getZ(),BuiltInRegistries.ITEM.getKey(item).toString(),count,state.toString()));
+        }
+        for(var liquid:List.of(Blocks.WATER,Blocks.LAVA)) {
+            boolean any=world.values().stream().anyMatch(state->state.is(liquid));
+            boolean source=world.values().stream().anyMatch(state->state.is(liquid) && SchematicFluids.source(state));
+            if(any && !source)throw new IllegalStateException("Include the source blocks for flowing "+BuiltInRegistries.BLOCK.getKey(liquid));
         }
         return new Snapshot(new BuildPlan(plan),world,companions);
     }
