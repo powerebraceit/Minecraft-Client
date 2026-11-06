@@ -1,73 +1,83 @@
-# Auto Builder — experimentell beta
+# Auto Builder — lokala .litematic-filer
 
-**1.3.0-beta.1 är en testversion.** Inventories, kistbindning, gångvägar, faktiska
-materialöverföringar och serverbekräftat lagerbygge har testats i Minecraft 26.3
-survival med en explicit tvåblocksplan. Kopplingen till en verklig Litematica-
-placering har **inte** körts i spel: miljön blockerar fortfarande nedladdningen av
-Litematica/MaLiLib. Preview, hörnankring och Litematicas Easy Place måste verifieras
-med dessa moddar innan funktionen kan betraktas som färdig.
+Från **1.4.0** läser Aurora `.litematic` direkt. **Litematica och MaLiLib behövs
+inte.** Filväljaren körs i Minecraft på spelarens dator; du behöver inte ladda upp
+schemat till någon tjänst.
 
-## Krav och användning
+## Välj och placera schemat
 
-Installera Litematica för **26.3** (0.29.x) och motsvarande MaLiLib (0.30.x) separat.
-Aurora startar även utan dem, men Auto Builder kan då inte aktiveras.
-
-1. Ladda ett `.litematic`-schema i Litematica och välj dess aktiverade placering.
-2. Öppna Aurora med höger Shift, välj World och högerklicka på **Auto Builder**.
-3. Slå på **Preview**. Knappen **Move schematic corner to your feet**, eller
-   **G** som standard, flyttar placeringens lägsta hörn till dina fötter. Låsta
-   placeringar/koordinater måste låsas upp först. Inställningen respekterar
-   subregionernas transformationer och väljer deras gemensamma min-hörn.
+1. Öppna en värld, tryck höger Shift, välj World och högerklicka på **Auto Builder**.
+2. Klicka **Choose .litematic file...**. Filväljaren börjar i instansens
+   `schematics`-mapp eller senast använda mapp. Klicka på en mapp för att öppna den
+   och på en `.litematic`-fil för att välja den. Sökvägsfältet och **Go** kan öppna
+   en annan mapp eller fil. **Up** går upp en mapp; **Home** öppnar din hemmapp.
+3. Aktivera **Preview** om den är avstängd. Schemat visas med blå, genomskinliga
+   blockformer. **G**, eller **Move schematic corner to your feet**, flyttar
+   schemats gemensamma lägsta hörn till blockpositionen vid dina fötter.
 4. Titta på en kista och tryck **V** för att registrera den som restock-kista.
-   Tryck på samma kista igen för att ta bort den. Tangenten kan ändras i modulens
-   inställningar. Egna modul-hotkeys från tidigare versioner har företräde vid en tangentkonflikt. Dubbelkistans två halvor räknas som samma inventory.
-5. Ändra **Restock color** i Auto Builder-inställningarna för att välja markeringens
-   färg. Markeringarna visas även när bygget är avstängt.
-6. Starta med **Start / stop build**, eller bind en modul-hotkey och använd den när
-   menyn är stängd. Stoppa med samma knapp/hotkey. Byggen återupptas aldrig automatiskt
-   efter en ny spelstart.
+   Samma tangent på samma kista tar bort den. Dubbelkistans två halvor räknas som
+   ett inventory. Ändra **Restock color** i modulinställningarna för att välja färg.
+5. Kontrollera previewn och starta med modulens av/på-knapp, **Start / stop build**
+   eller en egen modul-hotkey. Stoppa med samma knapp/hotkey. En ny fil eller
+   flyttning av hörnet stoppar ett pågående bygge. Starta sedan igen.
+
+Om du aktiverar Auto Builder innan du valt en fil öppnas filväljaren automatiskt.
+När filen valts försöker bygget starta. **Back** eller Escape avbryter starten.
+Använd det manuella filvalet i inställningarna om du vill granska previewn först.
+G- och V-tangenterna kan ändras. Egna modul-hotkeys har företräde vid en konflikt.
+Byggen återupptas inte automatiskt efter en ny spelstart; välj filen igen.
 
 ## Material och lager
 
-- Byggstart kräver allt återstående material i inventory eller inspekterade,
+- Start kräver allt återstående material i inventory eller inspekterade,
   registrerade kistor. Ingen blockplacering sker under materialinspektionen.
-- Klienten går till kistorna och väntar på serverns synkroniserade containerinnehåll.
-  Den gissar inte innehållet från klientens block entities.
-- Saknat material hämtas ur kistorna med vanliga inventory-klick och serverns
-  revision kvitterar överföringen. Den återstående delen av det aktuella lagret
-  styr vilka material som hämtas. Hela stackar kan flyttas; överskott ligger kvar
-  i spelarens inventory.
-- Ett lager slutförs före nästa. En klientprediktion räcker inte: blockpaket från
-  servern måste bekräfta varje begärd placering och rätt blockstate.
-- Litematicas placement-position-provider väljer exakt det planerade blocket under
-  Easy Place-anropet och avregistreras efteråt, så fri raytrace inte väljer nästa lager.
-- Saknade material, full inventory, konfliktblock, ändrad placering, världsbyte,
-  död eller misslyckad placering ger stopp/paus. En ny start gör om materialkontrollen.
+- Klienten går till kistorna och väntar på serverns containerinnehåll. Den gissar
+  inte innehållet från klientens block entities.
+- Saknat material för det aktuella lagret hämtas med vanliga inventory-klick.
+  Efter en stacköverföring stängs och öppnas kistan igen för att kontrollera
+  spelarens inventory mot serverns fullständiga synkronisering. Hela stackar kan
+  flyttas; överskott ligger kvar i inventory.
+- Ett lager slutförs före nästa. Serverns blockuppdateringar måste bekräfta både
+  placeringen och rätt blockstate. Redan korrekt placerade block hoppas över.
+- Trappor orienteras med spelets vanliga placeringsregler. En dubbel slab kräver
+  två föremål och två placeringsklick. Dörrars överdel och sängars huvud räknas
+  som tillhörande block, inte som extra föremål.
+- Saknade material, full inventory, konfliktblock, världsbyte, död eller en
+  misslyckad placering ger stopp/paus. En ny start gör om materialkontrollen.
 
-## Begränsningar
+## Filformat och begränsningar
 
-Gångvägen använder endast laddad, gångbar mark inom en begränsad sökning. Den kan
-ta enkla steg och hoppa ett block, men bygger inga broar eller ställningar, gräver
-inte vägar och flyger/teleporterar inte. Svåra/höga byggen kan därför pausa när ett
-block inte går att nå. Dagens gräns är 262144 schemaceller, 32 registrerade kistor
-och högst 8192 sökta gångnoder. Överlappande placeringar och subregioner nekas.
+Läsaren stöder `.litematic`-formatversion **5, 6 och 7**, negativa regionstorlekar,
+flera regioner och både klassisk och modern blockpalett. Blocknamn och properties
+måste vara giltiga i Minecraft 26.3. Äldre block konverteras inte automatiskt.
+`.schem` och `.schematic` stöds inte. Överlappande regioner nekas, även om en av
+regionerna har luft i överlappningen. Endast blockmönstret används; entiteter,
+inventarieinnehåll och block entity-NBT kopieras inte.
 
-Schemat bygger block, inte inventarieinnehåll, entiteter eller all block entity-NBT.
-Orienterade eller sammansatta block måste fungera med Litematicas Easy Place och
-serverns placeringsregler; vid felaktig blockstate pausas bygget. Ingen multiplayer-
-server eller annan modkombination har verifierats här.
+Gångvägen använder laddad, gångbar mark inom en begränsad sökning. Den kan ta enkla
+steg och hoppa ett block, men bygger inga broar eller ställningar och gräver inga
+vägar. Den flyger eller teleporterar inte. Svåra/höga byggen kan pausa när ett
+block inte går att nå. Placeringar kräver stöd och en blockstate som går att
+åstadkomma med vanliga placeringsklick; alla block och mekanismer stöds därför
+inte. Fel blockstate accepteras inte som ett färdigt bygge.
 
-## Verifiering och återstående arbete
+Gränser: **262144 schemaceller**, **32 MiB komprimerad fil**, **64 MiB NBT-data**,
+**32 registrerade kistor** och högst **8192 sökta gångnoder**. Preview visar högst
+4096 saknade block inom 48 block från spelaren. Filväljaren listar högst 500
+poster per mapp; använd en fullständig sökväg för övriga filer.
 
-Kör `./gradlew build runSmoke`. Speltestet körs i en egen lokal värld och går igenom
-kistbindning, sparad färg, dubbelkisteidentitet, fysisk gång, serverns inventory,
-faktisk restock, materialkonsumtion i survival, två serverbekräftade lager och
-nekad start när material saknas. Detta använder en **explicit testplan**, inte en
-Litematica-fil, och resultatfilen säger det uttryckligen.
+## Verifiering
 
-Nästa nödvändiga kontroll är ett riktigt `.litematic`-schema med Litematica och
-MaLiLib installerat: preview, G-ankring, roterade subregioner, Easy Place-provider,
-fler materialtyper och en paus/omstart efter saknade resurser. Nedladdning från
-`masa.dy.fi` och `api.modrinth.com` har fortfarande nekats med proxyns 403. Nya domäner
-(`masa.dy.fi`, `api.modrinth.com`, `cdn.modrinth.com`) ligger redan i miljöutkastet;
-det behöver aktiveras via miljöinställningarna för att slutföra dessa tester.
+`./gradlew build runSmoke` kör enhetstester och ett verkligt Minecraft 26.3-speltest
+i en separat lokal värld. Speltestet väljer en skapad `.litematic`-fil genom
+filväljaren utan Litematica/MaLiLib, provar automatisk filväljare och avbrytning,
+G-ankring och preview. Det bygger sedan sten, en riktad trappa och en dubbel slab
+i två lager i survival. Kistbindning, sparad färg, dubbelkisteidentitet, fysisk
+gång, serverns inventory, faktisk restock, materialkonsumtion och spärren vid
+saknade material verifieras också.
+
+Läsarens sex enhetstester täcker bland annat negativa dimensioner, packade bitar
+över long-gränser, flera regioner, felaktiga filer, klassisk blockpalett och
+materialantal för dörrar/dubbla slabs. Dörrar och sängar har inte speltestats.
+Testerna har körts på Linux med Java 25 och Fabric Loader 0.20.1. Windows, inloggad
+multiplayer och andra modkombinationer har inte verifierats i den här miljön.

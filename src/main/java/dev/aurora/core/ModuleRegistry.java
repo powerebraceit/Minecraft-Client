@@ -36,7 +36,7 @@ public final class ModuleRegistry {
         r.add(new ClientModule("block_info", "Block Info", "Inspect the block you are looking at", Category.WORLD));
         r.add(new ClientModule("biome_info", "Biome Info", "Display your current biome", Category.WORLD));
         r.add(new ClientModule("chat_timestamps", "Chat Timestamps", "Add local timestamps to chat messages", Category.MISC));
-        r.add(new ClientModule("auto_builder", "Auto Builder", "Litematica layers, preview and restock chests", Category.WORLD));
+        r.add(new ClientModule("auto_builder", "Auto Builder", "Local .litematic files, preview and restock chests", Category.WORLD));
         return r;
     }
 }

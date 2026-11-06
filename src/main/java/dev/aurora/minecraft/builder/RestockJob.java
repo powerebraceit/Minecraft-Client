@@ -34,7 +34,7 @@ public final class RestockJob {
     public void invalidate() { snapshots.clear(); }
     public void contents(AbstractContainerMenu menu) {
         Minecraft mc=Minecraft.getInstance();
-        if(active && phase==1 && mc.player!=null && menu==mc.player.containerMenu && menu instanceof ChestMenu) syncedId=menu.containerId;
+        if(active && (phase==1 || phase==4) && mc.player!=null && menu==mc.player.containerMenu && menu instanceof ChestMenu) syncedId=menu.containerId;
     }
     public BuildSession.Stock stock() {
         Minecraft mc=Minecraft.getInstance();
@@ -61,6 +61,7 @@ public final class RestockJob {
     public void cancel(String reason) {
         Minecraft mc=Minecraft.getInstance();
         if(active && mc.level==level && phase>0 && mc.player!=null && mc.player.containerMenu instanceof ChestMenu)mc.player.closeContainer();
+        if(active)dev.aurora.minecraft.AuroraClient.LOG.info("Restock ended: {}",reason);
         failed=active && !reason.equals("Inspection complete") && !reason.equals("Restock complete");
         active=false;phase=0;navigator.stop();status=reason;
     }
@@ -83,14 +84,28 @@ public final class RestockJob {
                 phase=1;ticks=0;return;
             }
             if(++ticks>160) { cancel("Chest did not synchronize; it may be blocked or inaccessible");return; }
+            // A correct vanilla predicted click may produce no revision packet at all.
+            // Reopening obtains authoritative contents for both the chest and player slots.
+            if(phase==2) {
+                if(!(mc.player.containerMenu instanceof ChestMenu)) {cancel("Chest was closed during restock");return;}
+                if(ticks<3)return;
+                mc.player.closeContainer();phase=3;ticks=0;syncedId=-1;return;
+            }
+            if(phase==3) {
+                if(ticks<3)return;
+                if(mc.gui.screen()!=null) {cancel("Another menu interrupted verification");return;}
+                for(int i=0;i<9;i++)if(mc.player.getInventory().getItem(i).isEmpty()){mc.player.getInventory().setSelectedSlot(i);break;}
+                lookAt(Vec3.atCenterOf(chest.pos()));
+                mc.gameMode.useItemOn(mc.player,InteractionHand.MAIN_HAND,new BlockHitResult(Vec3.atCenterOf(chest.pos()),Direction.UP,chest.pos(),false));
+                phase=4;ticks=0;return;
+            }
             if(!(mc.player.containerMenu instanceof ChestMenu menu)) {
-                if(phase>1)cancel("Chest was closed during restock");
+                if(phase>1 && mc.gui.screen()!=null)cancel("Chest was closed during restock");
                 return;
             }
             if(syncedId!=menu.containerId)return;
-            if(phase==2) {
-                if(menu.getStateId()==sentRevision)return;
-                if(inventory().getOrDefault(transferItem,0)<=beforeTransfer) { cancel("Inventory full or chest transfer rejected");return; }
+            if(phase==4) {
+                if(inventory().getOrDefault(transferItem,0)<=beforeTransfer) {cancel("Inventory full or chest transfer rejected");return;}
                 phase=1;ticks=0;
             }
             Map<String,Integer> stock=new HashMap<>();

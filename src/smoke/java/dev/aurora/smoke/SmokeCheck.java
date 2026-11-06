@@ -39,6 +39,8 @@ public final class SmokeCheck {
     private static net.minecraft.core.BlockPos buildBase, chestPos, pairPos, pairOther;
     private static net.minecraft.world.phys.Vec3 builderStart;
     private static java.util.List<dev.aurora.core.builder.BuildPlan.Block> fixtureBlocks;
+    private static Path schematicFile;
+    private static dev.aurora.minecraft.builder.SchematicFileScreen fileScreen;
     private static final Path RESULT = Path.of("aurora-smoke-result.txt");
 
     private static void check(boolean condition, String message) {
@@ -57,7 +59,7 @@ public final class SmokeCheck {
             if (stage == 0 && mc.gui.screen() instanceof TitleScreen && mc.gui.overlay() == null) {
                 check(client != null && client.modules().all().stream().filter(m -> !m.id().equals("auto_builder")).allMatch(m -> m.available()), "All ten modules have game implementations");
                 mc.options.renderDistance().set(3);
-                mc.options.simulationDistance().set(3);
+                mc.options.simulationDistance().set(5);
                 mc.createWorldOpenFlows().createFreshLevel("aurora-smoke-" + System.currentTimeMillis(),
                     new LevelSettings("Aurora smoke test", GameType.CREATIVE,
                         new LevelSettings.DifficultySettings(Difficulty.PEACEFUL, false, false), true, WorldDataConfiguration.DEFAULT),
@@ -209,7 +211,8 @@ public final class SmokeCheck {
                     player.inventoryMenu.broadcastChanges();
                     server.overworld().setBlockAndUpdate(chestPos, net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState());
                     var chest = (net.minecraft.world.level.block.entity.ChestBlockEntity) server.overworld().getBlockEntity(chestPos);
-                    chest.setItem(0, new ItemStack(Items.STONE, 8)); chest.setChanged();
+                    chest.setItem(0, new ItemStack(Items.STONE, 8));
+                    chest.setItem(1,new ItemStack(Items.OAK_STAIRS,1));chest.setItem(2,new ItemStack(Items.STONE_SLAB,2));chest.setChanged();
                     var leftState=net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState()
                         .setValue(net.minecraft.world.level.block.ChestBlock.TYPE,net.minecraft.world.level.block.state.properties.ChestType.LEFT);
                     pairPos=buildBase.offset(-4,0,4);
@@ -235,22 +238,50 @@ public final class SmokeCheck {
                 check(client.builder().restock.stock().items().getOrDefault("minecraft:stone", 0) == 8, "Inspected chest exposes its real inventory");
                 check(mc.player.position().distanceTo(builderStart) > 2, "Navigator walked to the chest without teleporting");
                 capture("aurora-restock.png");
-                fixtureBlocks = java.util.List.of(buildBlock(10,0), buildBlock(10,1));
-                client.builder().startSnapshot(fixtureSnapshot(fixtureBlocks));
-                stage = 10; stageTick = ticks;
+                schematicFile=writeSchematicFile();
+                mc.gui.setScreen(new AuroraScreen(client));
+                client.modules().get("auto_builder").setEnabled(true);
+                check(mc.gui.screen() instanceof dev.aurora.minecraft.builder.SchematicFileScreen, "Enabling Auto Builder automatically opens the local file picker");
+                mc.gui.screen().onClose();
+                check(!client.modules().get("auto_builder").enabled(), "Cancelling the file picker cancels pending construction");
+                fileScreen=new dev.aurora.minecraft.builder.SchematicFileScreen(new AuroraScreen(client),client);
+                mc.gui.setScreen(fileScreen);fileScreen.browse(schematicFile.getParent());
+                stage=20;stageTick=ticks;
+            } else if(stage==20 && ticks-stageTick>20 && fileScreen.entries().contains(schematicFile)) {
+                check(mc.gui.screen()==fileScreen, "Local schematic file picker opens inside Minecraft");
+                capture("aurora-file-picker.png");
+                int index=fileScreen.entries().indexOf(schematicFile);
+                fileScreen.mouseClicked(mouse(30,67+index*24+9),false);
+                stage=21;stageTick=ticks;
+            } else if(stage==21 && client.builder().document()!=null && client.builder().document().file().equals(schematicFile)) {
+                check(!net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("litematica") && !net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("malilib"), "Schematic works without Litematica and MaLiLib installed");
+                check(client.builder().document().blocks().size()==4, "Selected real .litematic file decoded all block states");
+                mc.gui.setScreen(null);
+                mc.keyboardHandler.keyPress(mc.getWindow().handle(),1,new KeyEvent(InputConstants.KEY_G,0,0));
+                check(client.builder().anchor().equals(mc.player.blockPosition()), "G anchors the schematic corner at the player's feet");
+                stage=22;stageTick=ticks;
+            } else if(stage==22 && ticks-stageTick>20) {
+                check(mc.getPerTickGizmos().size()>=4, "Standalone 3D schematic preview is rendered");
+                capture("aurora-schematic-preview.png");
+                fixtureBlocks=client.builder().document().at(client.builder().anchor()).plan().blocks();
+                check(dev.aurora.core.builder.BuildPlan.materials(fixtureBlocks).equals(java.util.Map.of("minecraft:stone",2,"minecraft:oak_stairs",1,"minecraft:stone_slab",2)), "File material list counts a double slab as two items");
+                client.modules().get("auto_builder").setEnabled(true);
+                stage=10;stageTick=ticks;
             } else if (stage == 10 && client.builder().state() == dev.aurora.core.builder.BuildSession.State.COMPLETE) {
-                check(fixtureBlocks.stream().allMatch(client.builder()::placed), "Survival placement is server-confirmed for both schematic layers");
-                check(client.builder().inventory().getOrDefault("minecraft:stone", 0) == 6, "Restock transferred eight materials and survival placement consumed two");
+                check(fixtureBlocks.stream().allMatch(client.builder()::placed), "File-based survival placement is server-confirmed for both layers, stairs and double slab");
+                check(client.builder().inventory().getOrDefault("minecraft:stone", 0) == 6, "Restock transferred eight stone and survival placement consumed two");
+                check(client.builder().inventory().getOrDefault("minecraft:oak_stairs",0)==0 && client.builder().inventory().getOrDefault("minecraft:stone_slab",0)==0, "Native placement consumes stair and both slab items");
                 capture("aurora-build.png");
+                client.modules().get("auto_builder").setEnabled(false);
                 fixtureBlocks = java.util.stream.IntStream.range(0, 7).mapToObj(i -> buildBlock(12+i,0)).toList();
                 client.builder().startSnapshot(fixtureSnapshot(fixtureBlocks));
                 stage = 11; stageTick = ticks;
             } else if (stage == 10 && client.builder().state() == dev.aurora.core.builder.BuildSession.State.PAUSED) {
-                throw new AssertionError("Builder paused: " + client.builder().status());
+                throw new AssertionError("Builder paused: " + client.builder().status() + "; inventory=" + client.builder().inventory() + "; restock=" + client.builder().restock.status());
             } else if (stage == 11 && client.builder().state() == dev.aurora.core.builder.BuildSession.State.MISSING_MATERIALS) {
                 check(fixtureBlocks.stream().noneMatch(client.builder()::placed), "Insufficient total materials prevent any new placement");
                 client.builder().stop("Smoke test complete");
-                Files.writeString(RESULT, "PASS: Minecraft 26.3 UI/HUD/settings, survival chest binding, synchronized restock inventory, walking, actual transfers, server-confirmed layer placement and missing-material gate. Litematica bridge not exercised without the optional mods.\n");
+                Files.writeString(RESULT, "PASS: Standalone .litematic file selected in the local file picker, decoded and anchored with G, previewed and built in survival without Litematica/MaLiLib. Restock, server-confirmed layers, oriented stairs, double slabs, inventory consumption and missing-material gate passed. UI/HUD/settings regressions passed.\n");
                 finished = true;
                 AuroraClient.LOG.info("AURORA SMOKE COMPLETE: PASS");
                 mc.stop();
@@ -263,14 +294,30 @@ public final class SmokeCheck {
         }
     }
 
+    private static Path writeSchematicFile() throws Exception {
+        var root=new net.minecraft.nbt.CompoundTag();root.putInt("Version",7);
+        var metadata=new net.minecraft.nbt.CompoundTag();metadata.putString("Name","Aurora standalone file smoke");root.put("Metadata",metadata);
+        var region=new net.minecraft.nbt.CompoundTag();
+        var position=new net.minecraft.nbt.CompoundTag();position.putInt("x",0);position.putInt("y",0);position.putInt("z",0);region.put("Position",position);
+        var size=new net.minecraft.nbt.CompoundTag();size.putInt("x",3);size.putInt("y",2);size.putInt("z",1);region.put("Size",size);
+        var palette=new net.minecraft.nbt.ListTag();
+        for(var state:java.util.List.of(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),
+            net.minecraft.world.level.block.Blocks.OAK_STAIRS.defaultBlockState().setValue(net.minecraft.world.level.block.StairBlock.FACING,net.minecraft.core.Direction.EAST),
+            net.minecraft.world.level.block.Blocks.STONE_SLAB.defaultBlockState().setValue(net.minecraft.world.level.block.SlabBlock.TYPE,net.minecraft.world.level.block.state.properties.SlabType.DOUBLE)))palette.add(net.minecraft.nbt.NbtUtils.writeBlockState(state));
+        region.put("BlockStatePalette",palette);region.putLongArray("BlockStates",new long[]{121});
+        var regions=new net.minecraft.nbt.CompoundTag();regions.put("main",region);root.put("Regions",regions);
+        Path folder=Minecraft.getInstance().gameDirectory.toPath().resolve("schematics/aurora-smoke").toAbsolutePath();Files.createDirectories(folder);
+        Path file=folder.resolve("local schematic.litematic");net.minecraft.nbt.NbtIo.writeCompressed(root,file);return file;
+    }
+
     private static dev.aurora.core.builder.BuildPlan.Block buildBlock(int x, int y) {
         var pos=buildBase.offset(x,y,0);
         return new dev.aurora.core.builder.BuildPlan.Block(pos.getX(),pos.getY(),pos.getZ(),"minecraft:stone",1,"minecraft:stone");
     }
-    private static dev.aurora.minecraft.builder.LitematicaBridge.Snapshot fixtureSnapshot(java.util.List<dev.aurora.core.builder.BuildPlan.Block> blocks) {
+    private static dev.aurora.minecraft.builder.DirectSchematic.Snapshot fixtureSnapshot(java.util.List<dev.aurora.core.builder.BuildPlan.Block> blocks) {
         java.util.Map<net.minecraft.core.BlockPos,net.minecraft.world.level.block.state.BlockState> states=new java.util.HashMap<>();
         for(var b:blocks)states.put(new net.minecraft.core.BlockPos(b.x(),b.y(),b.z()),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
-        return new dev.aurora.minecraft.builder.LitematicaBridge.Snapshot(new dev.aurora.core.builder.BuildPlan(blocks),states,null,"");
+        return new dev.aurora.minecraft.builder.DirectSchematic.Snapshot(new dev.aurora.core.builder.BuildPlan(blocks),states,java.util.Map.of());
     }
 
     private static void equip(EquipmentSlot slot, ItemStack stack, double damageFraction) {

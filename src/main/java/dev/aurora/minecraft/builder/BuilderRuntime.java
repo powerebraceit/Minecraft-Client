@@ -16,15 +16,36 @@ import net.minecraft.world.phys.Vec3;
 
 public final class BuilderRuntime implements BuildSession.Driver {
     private final AuroraClient client;
-    public final LitematicaBridge litematica=new LitematicaBridge();
+    private DirectSchematic document;
+    private BlockPos anchor;
+    private Object documentWorld;
+    private NativePlacement.Attempt attempt;
+    private BlockPos aimedTarget;
+    private int aimTicks;
+    private final Set<BlockPos> secondSlabClick=new HashSet<>();
+    public String schematicName() {return document==null?"Choose a .litematic file":document.name();}
+    public DirectSchematic document() {return document;}
+    public BlockPos anchor() {return anchor;}
+    public void load(DirectSchematic selected) {
+        Minecraft mc=Minecraft.getInstance();
+        if(mc.player==null)throw new IllegalStateException("Join a world before selecting a schematic");
+        stop("Schematic loaded");document=selected;anchor=mc.player.blockPosition().immutable();documentWorld=mc.level;session=null;
+        client.config().setting("auto_builder","last_file",selected.file().toString());client.save();
+        message="Loaded "+selected.name();
+    }
+    public void cornerAtFeet() {
+        if(document==null)throw new IllegalStateException("Choose a .litematic file first");
+        Minecraft mc=Minecraft.getInstance();if(mc.player==null)throw new IllegalStateException("Join a world first");
+        stop("Corner moved to feet");anchor=mc.player.blockPosition().immutable();documentWorld=mc.level;
+    }
     public final WalkNavigator navigator=new WalkNavigator();
     public final RestockChests chests;
     public final RestockJob restock;
-    private LitematicaBridge.Snapshot snapshot;
+    private DirectSchematic.Snapshot snapshot;
     private BuildSession session;
     private boolean preflight;
     private Object level;
-    private String message="Select a Litematica placement";
+    private String message="Choose a .litematic file";
     private final Map<BlockPos,BlockState> confirmations=new HashMap<>();
     private final Set<BlockPos> awaiting=new HashSet<>();
     public void confirmed(BlockPos pos,BlockState state) { if(awaiting.contains(pos))confirmations.put(pos.immutable(),state); }
@@ -41,28 +62,43 @@ public final class BuilderRuntime implements BuildSession.Driver {
         if(mc.player==null || mc.level==null)throw new IllegalStateException("Join a world first");
         boolean ownScreen=mc.gui.screen() instanceof dev.aurora.minecraft.AuroraScreen || mc.gui.screen() instanceof dev.aurora.minecraft.ModuleSettingsScreen;
         if(mc.gui.screen()!=null && !ownScreen)throw new IllegalStateException("Close other menus before starting the builder");
-        litematica.preview(client.config().flag("auto_builder","preview",true));
-        var plan=litematica.snapshot();
+        if(document==null) {
+            mc.gui.setScreen(new SchematicFileScreen(mc.gui.screen(),client,true));return;
+        }
+        if(documentWorld!=mc.level)throw new IllegalStateException("Move the schematic corner to your feet in this world first");
+        var plan=document.at(anchor);
+        for(var pos:plan.states().keySet())if(mc.level.isOutsideBuildHeight(pos))throw new IllegalStateException("Schematic extends outside the world build height");
         if(ownScreen)mc.gui.setScreen(null);
         startSnapshot(plan);
     }
     /** Also accepts an explicit immutable snapshot for the development integration runner. */
-    public void startSnapshot(LitematicaBridge.Snapshot plan) {
+    public void startSnapshot(DirectSchematic.Snapshot plan) {
         stop("Preparing build");snapshot=plan;level=Minecraft.getInstance().level;
         session=new BuildSession(plan.plan());moveTicks=0;waitingRevision=-1;
         if(BuildPlan.missing(BuildPlan.materials(plan.plan().remaining(this::placed)),inventory()).isEmpty())session.start(this);
         else { restock.startScan();preflight=true; }
     }
     public void stop(String reason) {
-        preflight=false;navigator.stop();restock.cancel(reason);waitingRevision=-1;awaiting.clear();confirmations.clear();
+        preflight=false;navigator.stop();restock.cancel(reason);waitingRevision=-1;awaiting.clear();confirmations.clear();secondSlabClick.clear();attempt=null;aimedTarget=null;
         if(session!=null)session.pause(reason);message=reason;
     }
     public void tick() {
         Minecraft mc=Minecraft.getInstance();
         if(mc.player==null || mc.level==null)return;
         chests.outlines();
+        preview();
         if(controlsInput() && (mc.level!=level || !mc.player.isAlive())) { stop("World changed or player died; restart explicitly");return; }
-        if(snapshot!=null && snapshot.placement()!=null && controlsInput() && !litematica.unchanged(snapshot)) { stop("Schematic placement changed; restart explicitly");return; }
+        if(snapshot!=null && controlsInput()) {
+            for(BlockPos pos:new ArrayList<>(awaiting)) {
+                var expected=snapshot.states().get(pos);var confirmed=confirmations.get(pos);
+                if(expected!=null && expected.getBlock() instanceof net.minecraft.world.level.block.SlabBlock
+                    && expected.getValue(net.minecraft.world.level.block.SlabBlock.TYPE)==net.minecraft.world.level.block.state.properties.SlabType.DOUBLE
+                    && confirmed!=null && confirmed.getBlock()==expected.getBlock() && confirmed!=expected && secondSlabClick.add(pos)) {
+                    try {var click=NativePlacement.find(pos,expected);click.aim();click.click();}
+                    catch(RuntimeException error){stop(error.getMessage());return;}
+                }
+            }
+        }
         if(restock.busy())restock.tick();
         if(preflight && !restock.busy()) {
             preflight=false;
@@ -82,7 +118,7 @@ public final class BuilderRuntime implements BuildSession.Driver {
         int bind=client.config().number("auto_builder","restock_key",25);
         if(key==0 || key!=anchor && key!=bind)return false;
         try {
-            if(key==anchor) { stop("Placement moved");litematica.cornerAtFeet();message="Schematic corner moved to your feet"; }
+            if(key==anchor) { stop("Placement moved");cornerAtFeet();message="Schematic corner moved to your feet"; }
             else { stop("Restock selection changed");chests.bindLookedAt();restock.invalidate();message="Restock chest selection updated"; }
             Minecraft.getInstance().gui.hud.getChat().addClientSystemMessage(Component.literal("Aurora: "+message));
         }catch(RuntimeException error) { message=error.getMessage();Minecraft.getInstance().gui.hud.getChat().addClientSystemMessage(Component.literal("Aurora: "+message)); }
@@ -91,14 +127,18 @@ public final class BuilderRuntime implements BuildSession.Driver {
     @Override public String worldIdentity() { return Integer.toHexString(System.identityHashCode(Minecraft.getInstance().level)); }
     @Override public boolean placed(BuildPlan.Block block) {
         Minecraft mc=Minecraft.getInstance();BlockPos pos=new BlockPos(block.x(),block.y(),block.z());
-        if(awaiting.contains(pos))return confirmations.get(pos)==snapshot.states().get(pos);
-        return mc.level.hasChunkAt(pos) && mc.level.getBlockState(pos)==snapshot.states().get(pos);
+        if(awaiting.contains(pos)) {
+            if(confirmations.get(pos)!=snapshot.states().get(pos))return false;
+            return snapshot.companions().getOrDefault(pos,List.of()).stream().allMatch(p->confirmations.get(p)==snapshot.states().get(p));
+        }
+        return mc.level.hasChunkAt(pos) && mc.level.getBlockState(pos)==snapshot.states().get(pos)
+            && snapshot.companions().getOrDefault(pos,List.of()).stream().allMatch(p->mc.level.getBlockState(p)==snapshot.states().get(p));
     }
     @Override public Map<String,Integer> inventory() { return RestockJob.inventory(); }
     @Override public BuildSession.Stock stock() { return restock.stock(); }
     @Override public BuildSession.Restock restock(Map<String,Integer> requirements) {
         if(restock.busy())return BuildSession.Restock.PENDING;
-        if(restock.failed())return BuildSession.Restock.BLOCKED;
+        if(restock.failed())throw new IllegalStateException(restock.status());
         if(restock.status().equals("Restock complete") && BuildPlan.missing(requirements,inventory()).isEmpty())return BuildSession.Restock.COMPLETE;
         try { restock.startRestock(requirements);return BuildSession.Restock.PENDING; }
         catch(RuntimeException error) { message=error.getMessage();return BuildSession.Restock.BLOCKED; }
@@ -122,7 +162,13 @@ public final class BuilderRuntime implements BuildSession.Driver {
         var inv=mc.player.getInventory();
         for(int i=0;i<36;i++) {
             if(!inv.getItem(i).isEmpty() && RestockJob.itemId(inv.getItem(i)).equals(block.item())) {
-                if(i<9) { inv.setSelectedSlot(i);moveTicks=0;return true; }
+                if(i<9) {
+                    inv.setSelectedSlot(i);
+                    if(!target.equals(aimedTarget) || attempt==null) {attempt=NativePlacement.find(target,snapshot.states().get(target));aimedTarget=target;aimTicks=2;}
+                    attempt.aim();
+                    if(aimTicks-->0)return false;
+                    moveTicks=0;return true;
+                }
                 waitingRevision=mc.player.inventoryMenu.getStateId();swapTicks=0;
                 mc.gameMode.handleContainerInput(mc.player.inventoryMenu.containerId,i,0,ContainerInput.SWAP,mc.player);
                 return false;
@@ -133,23 +179,29 @@ public final class BuilderRuntime implements BuildSession.Driver {
     @Override public void place(BuildPlan.Block block) {
         Minecraft mc=Minecraft.getInstance();BlockPos target=new BlockPos(block.x(),block.y(),block.z());
         awaiting.add(target.immutable());confirmations.remove(target);
-        RestockJob.lookAt(Vec3.atCenterOf(target));
-        if(snapshot.placement()!=null) { litematica.easyPlace(target);return; }
-        // Native placement is used by the development runner; user-facing Auto Builder requires Litematica.
-        for(Direction side:List.of(Direction.DOWN,Direction.NORTH,Direction.SOUTH,Direction.WEST,Direction.EAST,Direction.UP)) {
-            BlockPos support=target.relative(side);
-            if(!mc.level.getBlockState(support).getCollisionShape(mc.level,support).isEmpty() && !mc.level.getBlockState(support).hasBlockEntity()) {
-                Direction face=side.getOpposite();Vec3 hit=Vec3.atCenterOf(support).add(face.getStepX()*0.5,face.getStepY()*0.5,face.getStepZ()*0.5);
-                RestockJob.lookAt(hit);
-                mc.gameMode.useItemOn(mc.player,InteractionHand.MAIN_HAND,new BlockHitResult(hit,face,support,false));return;
+        for(BlockPos companion:snapshot.companions().getOrDefault(target,List.of())) {awaiting.add(companion);confirmations.remove(companion);}
+        if(attempt==null)throw new IllegalStateException("No validated placement context");
+        attempt.click();attempt=null;aimedTarget=null;
+    }
+    private void preview() {
+        Minecraft mc=Minecraft.getInstance();
+        if(document==null || anchor==null || mc.level!=documentWorld || !client.config().flag("auto_builder","preview",true))return;
+        try(var ignored=mc.collectPerTickGizmos()) {
+            int drawn=0;
+            for(var block:document.blocks().entrySet()) {
+                BlockPos p=anchor.offset(block.getKey());
+                if(mc.player.distanceToSqr(Vec3.atCenterOf(p))>48*48 || mc.level.getBlockState(p)==block.getValue())continue;
+                if(drawn++>=4096)break;
+                var shapes=block.getValue().getShape(mc.level,p).toAabbs();
+                if(shapes.isEmpty())shapes=List.of(new net.minecraft.world.phys.AABB(0,0,0,1,1,1));
+                for(var shape:shapes)net.minecraft.gizmos.Gizmos.cuboid(shape.move(p),net.minecraft.gizmos.GizmoStyle.strokeAndFill(0xff77caff,1,0x285588ff));
             }
         }
-        throw new IllegalStateException("No reachable support face for block placement");
     }
     public void drawStatus(GuiGraphicsExtractor graphics) {
         Minecraft mc=Minecraft.getInstance();
-        if(mc.player==null || mc.gui.hud.isHidden() || !controlsInput() && !client.enabled("auto_builder"))return;
-        String text=mc.font.plainSubstrByWidth("Auto Builder: "+status(),Math.max(40,graphics.guiWidth()-24));
+        if(mc.player==null || mc.gui.hud.isHidden() || !controlsInput() && !client.enabled("auto_builder") && (document==null || !client.config().flag("auto_builder","preview",true)))return;
+        String text=mc.font.plainSubstrByWidth("Auto Builder: "+(controlsInput() || client.enabled("auto_builder") ? status() : "Preview: "+schematicName()),Math.max(40,graphics.guiWidth()-24));
         graphics.text(mc.font,text,Math.max(6,(graphics.guiWidth()-mc.font.width(text))/2),6,0xffc4baff,true);
     }
 }

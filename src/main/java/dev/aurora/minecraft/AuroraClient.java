@@ -39,11 +39,10 @@ public final class AuroraClient implements ClientModInitializer {
         builder = new dev.aurora.minecraft.builder.BuilderRuntime(this);
         for (ClientModule module : modules.all()) {
             if (module.id().equals("auto_builder")) {
-                if (builder.litematica.available()) module.bind(new ClientModule.Effect() {
+                module.bind(new ClientModule.Effect() {
                     @Override public void enable() { builder.start(); }
                     @Override public void disable() { builder.stop("Stopped by user"); }
                 });
-                else module.unavailableReason("Requires Litematica 26.3 + MaLiLib");
                 continue; // Construction always requires a fresh, explicit start after joining a world.
             }
             module.bind(new ClientModule.Effect() {

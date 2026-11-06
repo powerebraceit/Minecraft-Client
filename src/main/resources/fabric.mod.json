@@ -3,10 +3,9 @@
   "id": "aurora",
   "version": "${version}",
   "name": "Aurora Client",
-  "description": "Animated module settings, draggable HUD and an experimental Litematica auto builder.",
+  "description": "Animated module settings, draggable HUD and a standalone .litematic auto builder.",
   "environment": "client",
   "entrypoints": { "client": ["dev.aurora.minecraft.AuroraClient"] },
   "mixins": ["aurora.mixins.json"],
-  "suggests": { "litematica": ">=0.29.0 <0.30.0", "malilib": ">=0.30.0 <0.31.0" },
   "depends": { "fabricloader": ">=0.20.1", "minecraft": "26.3", "java": ">=25" }
 }

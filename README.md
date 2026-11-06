@@ -5,7 +5,7 @@ lila accenter, fem modulkategorier och sökning över alla kategorier.
 
 ## Ladda ner och installera
 
-1. [Ladda ner aurora-client-1.3.0-beta.1.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.3.0-beta.1/releases/1.3.0-beta.1/aurora-client-1.3.0-beta.1.jar).
+1. [Ladda ner aurora-client-1.4.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.4.0/releases/1.4.0/aurora-client-1.4.0.jar).
 2. Installera [Fabric Loader](https://fabricmc.net/use/installer/) **0.20.1 eller senare** för **Minecraft 26.3**.
 3. Lägg JAR-filen i `mods`-mappen för den Minecraft-instans du använder.
    I en vanlig Windows-installation är det `%APPDATA%\.minecraft\mods`.
@@ -36,19 +36,26 @@ Moduler, menytangent, HUD-positioner och animationsval sparas i `config/aurora.p
 Alla moduler är avstängda vid första starten. För att återställa en glömd
 menytangent, stäng spelet och ta bort raden `menu.key` från konfigurationsfilen.
 
-## Auto Builder — experimentell beta
+## Auto Builder — välj en lokal fil
 
-**Denna version är en beta.** World-kategorin har nu Auto Builder med en valfri
-Litematica-integration, schematic-preview/hörnankring och inställningar för
-restock-kistor. Modulen kräver Litematica 26.3 och kompatibel MaLiLib. **G** flyttar
-schemats hörn till fötterna; **V** registrerar kistan du tittar på. Båda tangenterna
-kan ändras. Restock-kistans markeringsfärg ändras i högerklicksinställningarna.
+Auto Builder läser **`.litematic`-filer direkt från din dator**. Du behöver varken
+Litematica eller MaLiLib. Öppna World och högerklicka på **Auto Builder**, välj
+**Choose .litematic file...** och klicka på din fil. Filväljaren har mappar,
+sökvägsfält samt Go, Up och Home. När du aktiverar modulen utan att ha valt en fil
+öppnas filväljaren automatiskt; Back eller Escape avbryter starten.
 
-Kistbindning, gång, synkroniserade inventories, riktiga materialöverföringar och
-serverbekräftat lagerbygge har testats i survival med en explicit testplan.
-**En riktig Litematica-fil, preview och hörnankring är ännu inte speltestade**:
-nedladdningen av Litematica/MaLiLib blockeras fortfarande av miljöns nätverk.
-Det är därför inte en färdigverifierad auto-builder. Se [användning och begränsningar](docs/AUTO_BUILDER.md).
+En blå förhandsvisning visar schemat i världen. **G** flyttar schemats lägsta hörn
+till dina fötter. **V** registrerar kistan du tittar på som restock-kista. Båda
+tangenterna och kistmarkeringens färg kan ändras i modulens inställningar.
+Starta bygget först när previewn står rätt. Bygget kräver allt återstående
+material i ditt inventory eller registrerade kistor och arbetar lager för lager.
+
+Filval, preview, G-ankring, materialkontroll, gång till kista, materialhämtning och
+serverbekräftat lagerbygge har testats i Minecraft 26.3 survival **utan externa
+schematic-moddar**, med en riktig testfil som innehåller sten, en riktad trappa
+och en dubbel slab. Se [användning och begränsningar](docs/AUTO_BUILDER.md).
+
+![Välj en lokal .litematic-fil i Minecraft](docs/minecraft-file-picker.png)
 
 ![Registrerad restock-kista med vald markeringsfärg](docs/minecraft-restock.png)
 
@@ -82,7 +89,7 @@ och ta bort dess `hud.<modulnamn>.x` och `.y`-rader i `config/aurora.properties`
 | Render | FPS Counter | Visar bildfrekvens. |
 | World | Block Info | Visar namn och position för blocket du tittar på. |
 | World | Biome Info | Visar aktuell biom. |
-| World | Auto Builder (beta) | Litematica-planering, lagerbygge och restock. Kräver separat Litematica/MaLiLib; integrationen är ännu inte färdigverifierad. |
+| World | Auto Builder | Läser lokala `.litematic`-filer, visar preview och bygger lager för lager med restock. |
 | Misc | Chat Timestamps | Lägger till lokal klocktid på nya chattmeddelanden. |
 
 Rörelseändringarna gäller bara spelinmatningen och lämnar tangentinställningarna
@@ -106,7 +113,7 @@ spel- och resursservrar. Gradle-versionen är låst i wrappern och verifieras me
 ```
 
 På Windows: `gradlew.bat build`. Installationsfilen skapas i
-`build/libs/aurora-client-1.3.0-beta.1.jar`; filen med `-sources` är källkod.
+`build/libs/aurora-client-1.4.0.jar`; filen med `-sources` är källkod.
 
 ```bash
 ./gradlew runClient     # interaktiv utvecklingsklient
@@ -128,8 +135,10 @@ Testet verifierar även fyra rustningsikoner, dragning via chattens mushändelse
 sparade HUD-positioner, vanlig chattinmatning och ändrad GUI-skala.
 Testet sparar skärmbilder och en resultatfil; Gradle misslyckas om kontrollerna inte slutförs.
 
-Bygget kör även 34 grundkontroller, sex tester för HUD-positioner, två tester för modulinställningar
-och sju tester för byggplanering samt tre tester för gångvägar via JUnit. Speltestet har körts
+Bygget kör även 34 grundkontroller, sex tester för HUD-positioner, två tester för modulinställningar,
+sju tester för byggplanering, tre tester för gångvägar och sex tester för `.litematic`-läsaren via JUnit.
+Speltestet verifierar dessutom filval, avbruten filväljare, preview, G-ankring,
+restock och ett faktiskt survival-bygge i två lager med trappa och dubbel slab. Speltestet har körts
 lokalt på Minecraft **26.3**, Fabric Loader **0.20.1**, Java **25** och Linux med
 Mesa-mjukvarurendering. Windows, andra modpaket och inloggad multiplayer har inte
 testats i den här miljön.

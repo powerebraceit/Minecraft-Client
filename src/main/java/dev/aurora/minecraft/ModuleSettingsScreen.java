@@ -54,7 +54,8 @@ public final class ModuleSettingsScreen extends Screen {
         }
         if (module.id().equals("auto_builder")) {
             var builder = client.builder();
-            row(() -> "Schematic: " + builder.litematica.name(), () -> { });
+            row(() -> "Choose .litematic file...", () -> minecraft.gui.setScreen(new dev.aurora.minecraft.builder.SchematicFileScreen(this,client)));
+            row(() -> "Schematic: " + builder.schematicName(), () -> { });
             row(() -> "Status: " + builder.status(), () -> { });
             row(() -> "Start / stop build", () -> {
                 if (!module.available()) throw new IllegalStateException(module.unavailableReason());
@@ -64,9 +65,9 @@ public final class ModuleSettingsScreen extends Screen {
             });
             row(() -> "Preview: " + (client.config().flag("auto_builder", "preview", true) ? "On" : "Off"), () -> {
                 boolean enabled = !client.config().flag("auto_builder", "preview", true);
-                builder.litematica.preview(enabled); client.config().setting("auto_builder", "preview", Boolean.toString(enabled));
+                client.config().setting("auto_builder", "preview", Boolean.toString(enabled));
             });
-            row(() -> "Move schematic corner to your feet", () -> { builder.stop("Placement moved"); builder.litematica.cornerAtFeet(); });
+            row(() -> "Move schematic corner to your feet", () -> { builder.stop("Placement moved"); builder.cornerAtFeet(); });
             actionKey("Corner key", "anchor_key", 10);
             actionKey("Bind restock chest key", "restock_key", 25);
             row(() -> "Restock chests: " + (minecraft.level == null ? 0 : builder.chests.current().size()), () -> { });
