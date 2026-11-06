@@ -14,5 +14,7 @@ public abstract class HudMixin {
     @Inject(method = "extractRenderState", at = @At("TAIL"))
     private void aurora$hud(GuiGraphicsExtractor graphics, DeltaTracker delta, CallbackInfo ci) {
         AuroraHud.render(graphics);
+        var client = dev.aurora.minecraft.AuroraClient.instance();
+        if (client != null) client.builder().drawStatus(graphics);
     }
 }

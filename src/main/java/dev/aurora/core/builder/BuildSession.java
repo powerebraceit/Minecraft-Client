@@ -17,6 +17,7 @@ public final class BuildSession {
         Map<String, Integer> inventory();
         Stock stock();
         Restock restock(Map<String, Integer> layerRequirements);
+        default boolean preparePlacement(BuildPlan.Block block) { return true; }
         void place(BuildPlan.Block block);
     }
     private final BuildPlan plan;
@@ -63,6 +64,9 @@ public final class BuildSession {
             return;
         }
         state = State.BUILDING; status = "Building layer " + layer;
+        try {
+            if (!driver.preparePlacement(next)) { status = "Moving to layer " + layer; return; }
+        } catch (RuntimeException error) { pause(error.getMessage()); return; }
         pending = next; pendingTicks = 0;
         try { driver.place(next); }
         catch (RuntimeException error) { pause("Placement failed: " + error.getMessage()); }

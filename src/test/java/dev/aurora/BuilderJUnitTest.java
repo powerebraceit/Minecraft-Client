@@ -14,6 +14,8 @@ public final class BuilderJUnitTest {
         BuildSession.Stock stock = new BuildSession.Stock(Map.of(), true);
         String world = "world-a";
         boolean restocked;
+        boolean ready=true;
+        public boolean preparePlacement(BuildPlan.Block block) { return ready; }
         public String worldIdentity() { return world; }
         public boolean placed(BuildPlan.Block b) { return placed.contains(b); }
         public Map<String,Integer> inventory() { return inventory; }
@@ -45,6 +47,19 @@ public final class BuilderJUnitTest {
         assertEquals(List.of(block(0),block(1)),driver.requests);
         driver.placed.add(block(1)); session.tick(driver);
         assertEquals(BuildSession.State.COMPLETE,session.state());
+    }
+    @Test void movementDoesNotConsumeTheServerAcknowledgementTimeout() {
+        var driver=new Driver();driver.inventory.put("minecraft:stone",1);driver.ready=false;
+        var session=new BuildSession(new BuildPlan(List.of(block(0))));
+        assertTrue(session.start(driver));
+        for(int i=0;i<150;i++)session.tick(driver);
+        assertEquals(BuildSession.State.BUILDING,session.state());assertTrue(driver.requests.isEmpty());
+        driver.ready=true;session.tick(driver);assertEquals(1,driver.requests.size());
+    }
+    @Test void fullPlayerInventoryDoesNotRequireChestInspection() {
+        var driver=new Driver();driver.inventory.put("minecraft:stone",1);
+        driver.stock=new BuildSession.Stock(Map.of(),false);
+        assertTrue(new BuildSession(new BuildPlan(List.of(block(0)))).start(driver));
     }
     @Test void timeoutAndWorldChangePauseInsteadOfContinuing() {
         var driver = new Driver(); driver.inventory.put("minecraft:stone",2);

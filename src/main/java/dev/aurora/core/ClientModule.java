@@ -15,6 +15,9 @@ public final class ClientModule {
     private final Category category;
     private Effect effect;
     private boolean enabled;
+    private String unavailableReason = "Game implementation not installed";
+    public String unavailableReason() { return unavailableReason; }
+    public void unavailableReason(String reason) { unavailableReason = Objects.requireNonNull(reason); }
 
     public ClientModule(String id, String name, String description, Category category) {
         if (!id.matches("[a-z][a-z0-9_]*")) throw new IllegalArgumentException("Invalid module id");

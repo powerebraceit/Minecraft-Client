@@ -15,7 +15,7 @@ public final class CoreTest {
 
     public static void main(String[] args) throws Exception {
         ModuleRegistry registry = ModuleRegistry.catalog();
-        check(registry.all().size() == 10, "Catalog size");
+        check(registry.all().size() == 11, "Catalog size");
         for (Category category : Category.values()) check(!registry.search(category, "").isEmpty(), category.label());
         check(registry.search(Category.COMBAT, "  zOoM  ").getFirst().id().equals("zoom"), "Global case-insensitive search");
         check(registry.search(Category.COMBAT, "durability").size() == 1, "Description search");

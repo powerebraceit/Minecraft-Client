@@ -1,58 +1,73 @@
-# Auto Builder: pågående arbete
+# Auto Builder — experimentell beta
 
-Auto Builder är **inte en spelbar funktion i version 1.2.0**. Högerklicksinställningarna
-är färdiga, men Litematica-integrationen och automatisk restock är ännu inte färdiga.
+**1.3.0-beta.1 är en testversion.** Inventories, kistbindning, gångvägar, faktiska
+materialöverföringar och serverbekräftat lagerbygge har testats i Minecraft 26.3
+survival med en explicit tvåblocksplan. Kopplingen till en verklig Litematica-
+placering har **inte** körts i spel: miljön blockerar fortfarande nedladdningen av
+Litematica/MaLiLib. Preview, hörnankring och Litematicas Easy Place måste verifieras
+med dessa moddar innan funktionen kan betraktas som färdig.
 
-## Avsedd funktion
+## Krav och användning
 
-- Använd den valda, aktiverade placeringen i Litematica för Minecraft 26.3.
-- Visa Litematicas riktiga schematic-preview. En knapp flyttar byggnadens lägsta
-  hörn till spelarens fötter, även för roterade placeringar och flera subregioner.
-- Kontrollera allt återstående material före byggstart. Redan rätt placerade block
-  behöver inga nya material. Spelarens inventory och inspekterade restock-kistor
-  räknas tillsammans; okända kistor får aldrig räknas som tillgängligt material.
-- Bygg nerifrån och upp, ett lager i taget. Serverbekräftad placering krävs före
-  nästa block/lager. Felaktig placering får inte tyst godkännas.
-- Bind en tangent för att registrera kistan som spelaren tittar på. Spara dimension
-  och position, undvik dubbelräkning av dubbelkistor och markera valda kistor med
-  en färg som kan ändras i Auto Builders högerklicksinställningar.
-- Hämta saknat lagermaterial genom att gå till en registrerad kista, öppna den,
-  läsa dess synkroniserade inventory och flytta relevanta stackar. Vänta på serverns
-  inventory-uppdateringar och gå tillbaka för att fortsätta bygga samma lager.
-- Ge begriplig pausstatus vid saknat material, full inventory, blockerad väg,
-  otillgänglig placering, byte av värld eller misslyckad blockplacering.
+Installera Litematica för **26.3** (0.29.x) och motsvarande MaLiLib (0.30.x) separat.
+Aurora startar även utan dem, men Auto Builder kan då inte aktiveras.
 
-## Kod som finns
+1. Ladda ett `.litematic`-schema i Litematica och välj dess aktiverade placering.
+2. Öppna Aurora med höger Shift, välj World och högerklicka på **Auto Builder**.
+3. Slå på **Preview**. Knappen **Move schematic corner to your feet**, eller
+   **G** som standard, flyttar placeringens lägsta hörn till dina fötter. Låsta
+   placeringar/koordinater måste låsas upp först. Inställningen respekterar
+   subregionernas transformationer och väljer deras gemensamma min-hörn.
+4. Titta på en kista och tryck **V** för att registrera den som restock-kista.
+   Tryck på samma kista igen för att ta bort den. Tangenten kan ändras i modulens
+   inställningar. Egna modul-hotkeys från tidigare versioner har företräde vid en tangentkonflikt. Dubbelkistans två halvor räknas som samma inventory.
+5. Ändra **Restock color** i Auto Builder-inställningarna för att välja markeringens
+   färg. Markeringarna visas även när bygget är avstängt.
+6. Starta med **Start / stop build**, eller bind en modul-hotkey och använd den när
+   menyn är stängd. Stoppa med samma knapp/hotkey. Byggen återupptas aldrig automatiskt
+   efter en ny spelstart.
 
-`core/builder/BuildPlan.java` ger en oföränderlig lagerordning och materialräkning.
-`core/builder/BuildSession.java` ger materialspärr, lagerbarriär, restock-tillstånd,
-väntan på bekräftelse, timeout och stopp vid världsbyte. Fem logiktester täcker
-materialbrist, okända kistor, restock före placering, korrekt lagerordning och
-återställning. Detta är planeringskod; den ansluts ännu inte till spelet eller en
-påhittad Auto Builder-modul i menyn.
+## Material och lager
 
-## Inspekterad Litematica-kod
+- Byggstart kräver allt återstående material i inventory eller inspekterade,
+  registrerade kistor. Ingen blockplacering sker under materialinspektionen.
+- Klienten går till kistorna och väntar på serverns synkroniserade containerinnehåll.
+  Den gissar inte innehållet från klientens block entities.
+- Saknat material hämtas ur kistorna med vanliga inventory-klick och serverns
+  revision kvitterar överföringen. Den återstående delen av det aktuella lagret
+  styr vilka material som hämtas. Hela stackar kan flyttas; överskott ligger kvar
+  i spelarens inventory.
+- Ett lager slutförs före nästa. En klientprediktion räcker inte: blockpaket från
+  servern måste bekräfta varje begärd placering och rätt blockstate.
+- Litematicas placement-position-provider väljer exakt det planerade blocket under
+  Easy Place-anropet och avregistreras efteråt, så fri raytrace inte väljer nästa lager.
+- Saknade material, full inventory, konfliktblock, ändrad placering, världsbyte,
+  död eller misslyckad placering ger stopp/paus. En ny start gör om materialkontrollen.
 
-Officiella 26.3-källor finns i Sakura-Ryokos Litematica och MaLiLib-repon:
+## Begränsningar
 
-- `DataManager.getSchematicPlacementManager().getSelectedSchematicPlacement()`
-- `SchematicPlacement.getOrigin()`, `getSubRegionBoxes(...)` och
-  `setOrigin(BlockPos, IStringConsumer)`; låsta placeringar måste respekteras.
-- `SchematicWorldHandler.getSchematicWorld()` för previewns transformerade block.
-- `MaterialCache.getRequiredBuildItemForState(...)` för korrekt materialmappning.
-- `EasyPlaceUtils.handleEasyPlaceWithMessage()` använder spelarens riktiga sikte,
-  räckvidd och klickposition. Returvärdet är inte ett kvitto på lyckad placering;
-  verklig blockstate måste kontrolleras efteråt.
+Gångvägen använder endast laddad, gångbar mark inom en begränsad sökning. Den kan
+ta enkla steg och hoppa ett block, men bygger inga broar eller ställningar, gräver
+inte vägar och flyger/teleporterar inte. Svåra/höga byggen kan därför pausa när ett
+block inte går att nå. Dagens gräns är 262144 schemaceller, 32 registrerade kistor
+och högst 8192 sökta gångnoder. Överlappande placeringar och subregioner nekas.
 
-## Återstående för implementation och verifiering
+Schemat bygger block, inte inventarieinnehåll, entiteter eller all block entity-NBT.
+Orienterade eller sammansatta block måste fungera med Litematicas Easy Place och
+serverns placeringsregler; vid felaktig blockstate pausas bygget. Ingen multiplayer-
+server eller annan modkombination har verifierats här.
 
-Hämta kompatibla Litematica/MaLiLib-JAR-filer och lås deras versioner. Implementera
-placement-snapshot och preview/fötter-ankring, registrering och rendering av kistor,
-vägval och rörelse, verkliga containeröverföringar och blockplacering samt
-inställningsraderna. Kör sedan integrationstest i survival med ett litet flerlager-schema,
-korrekta och saknade material, färgbyte, restock och världsbyte. Publicera ingen
-funktion som klar innan dessa kontroller har körts.
+## Verifiering och återstående arbete
 
-I den aktuella molnmiljön nekades hämtning från `masa.dy.fi` och `api.modrinth.com`
-med HTTP-proxyns 403. `masa.dy.fi`, `api.modrinth.com` och `cdn.modrinth.com` har
-lagts till i miljöns konfigurationsutkast men behöver aktiveras genom miljöinställningarna.
+Kör `./gradlew build runSmoke`. Speltestet körs i en egen lokal värld och går igenom
+kistbindning, sparad färg, dubbelkisteidentitet, fysisk gång, serverns inventory,
+faktisk restock, materialkonsumtion i survival, två serverbekräftade lager och
+nekad start när material saknas. Detta använder en **explicit testplan**, inte en
+Litematica-fil, och resultatfilen säger det uttryckligen.
+
+Nästa nödvändiga kontroll är ett riktigt `.litematic`-schema med Litematica och
+MaLiLib installerat: preview, G-ankring, roterade subregioner, Easy Place-provider,
+fler materialtyper och en paus/omstart efter saknade resurser. Nedladdning från
+`masa.dy.fi` och `api.modrinth.com` har fortfarande nekats med proxyns 403. Nya domäner
+(`masa.dy.fi`, `api.modrinth.com`, `cdn.modrinth.com`) ligger redan i miljöutkastet;
+det behöver aktiveras via miljöinställningarna för att slutföra dessa tester.

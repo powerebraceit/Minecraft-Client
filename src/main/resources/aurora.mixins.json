@@ -2,6 +2,6 @@
   "required": true,
   "package": "dev.aurora.minecraft.mixin",
   "compatibilityLevel": "JAVA_25",
-  "client": ["KeyboardMixin", "HudMixin", "ChatMixin", "CameraMixin", "InputMixin", "ChatScreenMixin"],
+  "client": ["KeyboardMixin", "HudMixin", "ChatMixin", "CameraMixin", "InputMixin", "ChatScreenMixin", "BuilderTickMixin", "MenuContentsMixin", "BuilderBlockUpdateMixin"],
   "injectors": { "defaultRequire": 1 }
 }

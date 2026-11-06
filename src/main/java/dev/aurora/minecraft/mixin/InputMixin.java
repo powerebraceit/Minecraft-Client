@@ -17,6 +17,12 @@ public abstract class InputMixin extends ClientInput {
         AuroraClient client = AuroraClient.instance();
         Minecraft mc = Minecraft.getInstance();
         if (client == null || mc.player == null || mc.gui.screen() != null) return;
+        if (client.builder().controlsInput()) {
+            var nav = client.builder().navigator;
+            keyPresses = new Input(nav.forward(), false, false, false, nav.jump(), false, false);
+            moveVector = new net.minecraft.world.phys.Vec2(0, nav.forward() ? 1 : 0);
+            return;
+        }
         Input p = keyPresses;
         keyPresses = new Input(p.forward(), p.backward(), p.left(), p.right(), p.jump(),
             p.shift() || client.enabled("toggle_sneak"), p.sprint() || client.enabled("toggle_sprint"));

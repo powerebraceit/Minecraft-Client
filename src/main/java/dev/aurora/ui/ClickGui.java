@@ -81,7 +81,7 @@ public final class ClickGui {
             boolean hover = inside(mouseX, mouseY, left, cy, bodyWidth, 58);
             canvas.roundedRect(left, cy, bodyWidth, 58, 9, hover ? 0xff292f46 : 0xff1d2335);
             canvas.text(ellipsis(module.name(), bodyWidth - 64, 12), left + 12, cy + 12, 12, WHITE);
-            canvas.text(ellipsis(module.available() ? module.description() : "Awaiting Minecraft 26.3 integration", bodyWidth - 26, 8), left + 12, cy + 34, 8, MUTED);
+            canvas.text(ellipsis(module.available() ? module.description() : module.unavailableReason(), bodyWidth - 26, 8), left + 12, cy + 34, 8, MUTED);
             float amount = approach(toggles.getOrDefault(module.id(), 0f), module.enabled() ? 1 : 0, dt, config.reducedMotion());
             toggles.put(module.id(), amount);
             canvas.roundedRect(left + bodyWidth - 44, cy + 12, 30, 16, 8, mix(0xff42495e, ACCENT, amount));
@@ -130,7 +130,7 @@ public final class ClickGui {
             List<ClientModule> list = visible();
             if (index >= 0 && index < list.size() && inRow < 58) {
                 ClientModule module = list.get(index);
-                if (!module.available()) { status = "Game integration not installed"; return true; }
+                if (!module.available()) { status = module.unavailableReason(); return true; }
                 try {
                     module.setEnabled(!module.enabled()); config.remember(module);
                 } catch (RuntimeException e) { status = "Could not update module: " + module.name(); return true; }

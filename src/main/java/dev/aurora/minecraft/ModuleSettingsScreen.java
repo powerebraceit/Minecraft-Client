@@ -52,6 +52,41 @@ public final class ModuleSettingsScreen extends Screen {
             });
             row(() -> "Reset HUD position", () -> client.config().resetHudPosition(module.id()));
         }
+        if (module.id().equals("auto_builder")) {
+            var builder = client.builder();
+            row(() -> "Schematic: " + builder.litematica.name(), () -> { });
+            row(() -> "Status: " + builder.status(), () -> { });
+            row(() -> "Start / stop build", () -> {
+                if (!module.available()) throw new IllegalStateException(module.unavailableReason());
+                minecraft.gui.setScreen(null);
+                try { module.setEnabled(!module.enabled()); client.config().remember(module); }
+                catch (RuntimeException error) { minecraft.gui.setScreen(this); throw error; }
+            });
+            row(() -> "Preview: " + (client.config().flag("auto_builder", "preview", true) ? "On" : "Off"), () -> {
+                boolean enabled = !client.config().flag("auto_builder", "preview", true);
+                builder.litematica.preview(enabled); client.config().setting("auto_builder", "preview", Boolean.toString(enabled));
+            });
+            row(() -> "Move schematic corner to your feet", () -> { builder.stop("Placement moved"); builder.litematica.cornerAtFeet(); });
+            actionKey("Corner key", "anchor_key", 10);
+            actionKey("Bind restock chest key", "restock_key", 25);
+            row(() -> "Restock chests: " + (minecraft.level == null ? 0 : builder.chests.current().size()), () -> { });
+            row(() -> "Restock color: #" + Integer.toHexString(client.config().number("auto_builder", "chest_color", COLORS[0]) & 0xffffff), () -> {
+                int color=client.config().number("auto_builder", "chest_color", COLORS[0]); int next=0;
+                for(int i=0;i<COLORS.length;i++)if(color==COLORS[i])next=(i+1)%COLORS.length;
+                client.config().setting("auto_builder", "chest_color", Integer.toString(COLORS[next]));
+            });
+            row(() -> "Inspect registered chest inventories", () -> {
+                minecraft.gui.setScreen(null);
+                try { builder.inspectChests(); }
+                catch(RuntimeException error) { minecraft.gui.setScreen(this); throw error; }
+            });
+            row(() -> "Clear restock chests in this world", () -> {
+                if(minecraft.level == null)throw new IllegalStateException("Join a world first");
+                builder.stop("Restock list cleared");
+                builder.chests.save(builder.chests.all().stream().filter(chest -> !chest.dimension().equals(builder.chests.dimension())).toList());
+                builder.restock.invalidate();
+            });
+        }
         if (module.id().equals("zoom")) {
             row(() -> "Zoom: " + client.config().number("zoom", "factor", 4) + "x", () -> {
                 int factor = client.config().number("zoom", "factor", 4);
@@ -60,6 +95,18 @@ public final class ModuleSettingsScreen extends Screen {
             flag("Smooth zoom", "smooth", true);
         }
         if (module.id().equals("chat_timestamps")) flag("Show seconds", "seconds", false);
+    }
+
+    private void actionKey(String label, String setting, int fallback) {
+        row(() -> label + ": " + keyName(client.config().number("auto_builder", setting, fallback)), () -> capturing = key -> {
+            if(key != 0 && key == client.config().menuKey())throw new IllegalArgumentException("This key opens the menu");
+            for(var other : client.modules().all())if(key != 0 && client.config().number(other.id(), "key", 0) == key)
+                throw new IllegalArgumentException("Key is used by " + other.name());
+            String other = setting.equals("anchor_key") ? "restock_key" : "anchor_key";
+            int otherDefault = other.equals("anchor_key") ? 10 : 25;
+            if(key != 0 && client.config().number("auto_builder", other, otherDefault) == key)throw new IllegalArgumentException("Key is used by the other builder action");
+            client.config().setting("auto_builder", setting, Integer.toString(key));
+        });
     }
 
     private void row(Supplier<String> label, Runnable action) { rows.add(new Row(label, action)); }

@@ -20,6 +20,8 @@ public final class AuroraClient implements ClientModInitializer {
     private final ModuleRegistry modules = ModuleRegistry.catalog();
     private final Path configPath = FabricLoader.getInstance().getConfigDir().resolve("aurora.properties");
     private ClientConfig config;
+    private dev.aurora.minecraft.builder.BuilderRuntime builder;
+    public dev.aurora.minecraft.builder.BuilderRuntime builder() { return builder; }
     private double zoomFactor = 1;
     private long lastZoomNanos;
 
@@ -34,7 +36,16 @@ public final class AuroraClient implements ClientModInitializer {
             LOG.error("Could not read Aurora settings; using defaults (original file retained)", error);
             config = new ClientConfig();
         }
+        builder = new dev.aurora.minecraft.builder.BuilderRuntime(this);
         for (ClientModule module : modules.all()) {
+            if (module.id().equals("auto_builder")) {
+                if (builder.litematica.available()) module.bind(new ClientModule.Effect() {
+                    @Override public void enable() { builder.start(); }
+                    @Override public void disable() { builder.stop("Stopped by user"); }
+                });
+                else module.unavailableReason("Requires Litematica 26.3 + MaLiLib");
+                continue; // Construction always requires a fresh, explicit start after joining a world.
+            }
             module.bind(new ClientModule.Effect() {
                 @Override public void enable() { }
                 @Override public void disable() {
@@ -57,8 +68,13 @@ public final class AuroraClient implements ClientModInitializer {
     public boolean moduleKey(int key) {
         for (ClientModule module : modules.all()) {
             if (key != 0 && config.number(module.id(), "key", 0) == key && module.available()) {
-                module.setEnabled(!module.enabled()); config.remember(module);
-                try { save(); } catch (IllegalStateException ignored) { }
+                try {
+                    module.setEnabled(!module.enabled()); config.remember(module); save();
+                } catch (RuntimeException error) {
+                    LOG.warn("Module hotkey action failed: {}", module.id(), error);
+                    Minecraft.getInstance().gui.hud.getChat().addClientSystemMessage(Component.literal("Aurora: " +
+                        (error.getMessage() == null ? "Could not change module" : error.getMessage())));
+                }
                 return true;
             }
         }
