@@ -5,7 +5,7 @@ lila accenter, fem modulkategorier och sökning över alla kategorier.
 
 ## Ladda ner och installera
 
-1. [Ladda ner aurora-client-1.9.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.9.0/releases/1.9.0/aurora-client-1.9.0.jar).
+1. [Ladda ner aurora-client-1.10.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.10.0/releases/1.10.0/aurora-client-1.10.0.jar).
 2. Installera [Fabric Loader](https://fabricmc.net/use/installer/) **0.20.1 eller senare** för **Minecraft 26.3**.
 3. Lägg JAR-filen i `mods`-mappen för den Minecraft-instans du använder.
    I en vanlig Windows-installation är det `%APPDATA%\.minecraft\mods`.
@@ -54,6 +54,14 @@ till dina fötter. **V** registrerar kistan du tittar på som restock-kista. Bå
 tangenterna och kistmarkeringens färg kan ändras i modulens inställningar.
 Starta bygget först när previewn står rätt. Bygget kräver allt återstående
 material i ditt inventory eller registrerade kistor och arbetar lager för lager.
+
+**A* och placeringskö i 1.10.0:** algoritmen är separerad i en loaderoberoende
+Java-motor, en säker terrängadapter och en serverbekräftad placeringskö. Den söker
+en nåbar ståplats med rätt sikt och räckvidd, planerar om när block ändras och
+undviker upprepade misslyckade vägkanter. En utväg kontrolleras även i en simulerad
+värld efter placeringen. Rotation och faktisk klickyta måste stämma överens.
+Se [den dokumenterade Java-koden och det körbara exemplet](docs/BUILDER_ALGORITHM.md).
+Kärnan kan återanvändas i Forge; den här byggda modden använder Fabric.
 
 **Byggtempo och räckvidd i 1.9.0:** byggaren väljer närliggande block inom
 samma lager, behåller målet under gång och stannar när en giltig placering finns.
@@ -186,7 +194,7 @@ spel- och resursservrar. Gradle-versionen är låst i wrappern och verifieras me
 ```
 
 På Windows: `gradlew.bat build`. Installationsfilen skapas i
-`build/libs/aurora-client-1.9.0.jar`; filen med `-sources` är källkod.
+`build/libs/aurora-client-1.10.0.jar`; filen med `-sources` är källkod.
 
 ```bash
 ./gradlew runClient     # interaktiv utvecklingsklient
@@ -209,7 +217,7 @@ sparade HUD-positioner, vanlig chattinmatning och ändrad GUI-skala.
 Testet sparar skärmbilder och en resultatfil; Gradle misslyckas om kontrollerna inte slutförs.
 
 Bygget kör även 34 grundkontroller, sex tester för HUD-positioner, två tester för modulinställningar,
-17 tester för byggplanering, tre tester för gångvägar, sju tester för `.litematic`-läsaren, sex tester för preview/materialantal och sju vätsketester via JUnit.
+19 tester för byggplanering, tre tester för gångvägar, sju tester för `.litematic`-läsaren, sex tester för preview/materialantal och sju vätsketester via JUnit.
 Speltestet verifierar dessutom filval, avbruten filväljare, texturerad preview,
 röda/gula ramar, döljning av rätt placerade block, återvisning efter borttagning,
 materiallistor, flyttning av material-HUD och G-ankring. Bildkontroller jämför

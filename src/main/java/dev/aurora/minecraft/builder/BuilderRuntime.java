@@ -12,6 +12,8 @@ import net.minecraft.world.level.block.state.BlockState;
 public final class BuilderRuntime implements BuildSession.Driver {
     private final AuroraClient client;
     public final BucketActions buckets=new BucketActions();
+    private final BuildExitGuard exitGuard=new BuildExitGuard();
+    private boolean escapeViewRequired;
     public final WaterSupply water;
     private BucketActions.Aim bucketAim;
     public final SchematicPreview preview=new SchematicPreview(this);
@@ -69,6 +71,8 @@ public final class BuilderRuntime implements BuildSession.Driver {
     private final Map<BlockPos,BlockState> confirmations=new HashMap<>();
     private final Set<BlockPos> awaiting=new HashSet<>();
     public void confirmed(BlockPos pos,BlockState state) {
+        navigator.invalidate(pos);
+        exitGuard.confirmed(pos);
         if(awaiting.contains(pos))confirmations.put(pos.immutable(),state);
         water.confirmed(pos,state);
         if(documentInWorld() && materials!=null)materials.changed(pos,Minecraft.getInstance().level);
@@ -98,7 +102,8 @@ public final class BuilderRuntime implements BuildSession.Driver {
     /** Also accepts an explicit immutable snapshot for the development integration runner. */
     public void startSnapshot(DirectSchematic.Snapshot plan) {
         stop("Preparing build");placementClicks=0;maxPlacementDistance=0;lastPlacementTick=clientTicks-4;snapshot=plan;level=Minecraft.getInstance().level;
-        session=new BuildSession(plan.plan());moveTicks=0;
+        session=new BuildSession(plan.plan(),200);moveTicks=0;
+        exitGuard.configure(plan,preferredExitPositions());
         var remaining=plan.plan().remaining(this::placed);
         water.configure(plan,remaining.stream().filter(b->b.item().equals("minecraft:water_bucket")).count());
         var missing=new HashMap<>(BuildPlan.missing(BuildPlan.materials(remaining),inventory()));
@@ -107,7 +112,7 @@ public final class BuilderRuntime implements BuildSession.Driver {
         else { restock.startScan();preflight=true; }
     }
     public void stop(String reason) {
-        preflight=false;navigator.stop();restock.cancel(reason);water.cancel();buckets.cancel();bucketAim=null;awaiting.clear();confirmations.clear();finalCheckTicks=0;activeBlock=null;rejectedViews.clear();attempt=null;aimedTarget=null;
+        preflight=false;navigator.stop();restock.cancel(reason);water.cancel();buckets.cancel();bucketAim=null;awaiting.clear();confirmations.clear();finalCheckTicks=0;activeBlock=null;escapeViewRequired=false;rejectedViews.clear();attempt=null;aimedTarget=null;
         if(session!=null)session.pause(reason);message=reason;
     }
     public void tick() {
@@ -151,6 +156,13 @@ public final class BuilderRuntime implements BuildSession.Driver {
         BlockState actual=awaiting.contains(pos)?confirmations.get(pos):mc.level.getBlockState(pos);
         if(actual==null || recipe==null || !mc.level.hasChunkAt(pos) || !recipe.done(block.stage(),actual))return false;
         return snapshot.companions().getOrDefault(pos,List.of()).stream().allMatch(p->PlacementRecipes.equivalent(awaiting.contains(p)?confirmations.get(p):mc.level.getBlockState(p),snapshot.states().get(p)));
+    }
+    @Override public String confirmationFailure(BuildPlan.Block block) {
+        var pos=new BlockPos(block.x(),block.y(),block.z());
+        var confirmed=confirmations.get(pos);
+        String observed=confirmed==null?"no server block update":confirmed.toString();
+        AuroraClient.LOG.warn("Placement confirmation failed: target={} expected={} observed={}",pos,block.state(),observed);
+        return "Unconfirmed block at "+pos.toShortString()+"; expected "+block.state()+"; server: "+observed;
     }
     @Override public boolean completionReady() {
         var mc=Minecraft.getInstance();
@@ -217,7 +229,7 @@ public final class BuilderRuntime implements BuildSession.Driver {
             if(!water.prepare())return false;
         }
         if(!block.equals(activeBlock)) {
-            activeBlock=block;rejectedViews.clear();moveTicks=0;navigator.stop();attempt=null;bucketAim=null;aimedTarget=null;
+            activeBlock=block;escapeViewRequired=false;rejectedViews.clear();moveTicks=0;navigator.stop();attempt=null;bucketAim=null;aimedTarget=null;
         }
         if(clientTicks-lastPlacementTick<4)return false;
         if(++moveTicks>1200)throw new IllegalStateException("Could not reach the next block within 60 seconds");
@@ -229,7 +241,7 @@ public final class BuilderRuntime implements BuildSession.Driver {
         if(!actual.canBeReplaced() && !placed(block) && !recipe.canContinue(block.stage(),actual))throw new IllegalStateException("Remove the conflicting block at "+target.toShortString());
         if(!buckets.select(block.item()))return false;
         try {
-            if(!navigator.walkToPlacement(target,feet->!rejectedViews.contains(BlockPos.containing(feet)) && !BlockPos.containing(feet).equals(target) && NativePlacement.visibleFrom(target,step,feet)))return false;
+            if(!navigator.walkToPlacement(target,feet->!rejectedViews.contains(BlockPos.containing(feet)) && !BlockPos.containing(feet).equals(target) && NativePlacement.visibleFrom(target,step,feet) && (!escapeViewRequired || exitGuard.canPlaceFrom(target,expected,feet))))return false;
         }catch(IllegalStateException error) {throw placementFailure(block,target,error);}
         if(!mc.player.onGround() || mc.player.getDeltaMovement().horizontalDistanceSqr()>0.0025)return false;
         try {
@@ -238,21 +250,40 @@ public final class BuilderRuntime implements BuildSession.Driver {
             bucketAim.aim();if(aimTicks-->0)return false;
             bucketAim=BucketActions.find(target,false,expected.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED));
         }else {
-            if(!target.equals(aimedTarget) || attempt==null) {attempt=findAttempt(target,step);aimedTarget=target;aimTicks=aimDelay(attempt,step);}
+            if(!target.equals(aimedTarget) || attempt==null) {attempt=findAttempt(target,step);attempt.aim();attempt.sendRotation();aimedTarget=target;aimTicks=aimDelay(attempt,step);}
             attempt.aim();if(aimTicks-->0)return false;
-            if(!attempt.visible()) {attempt=findAttempt(target,step);aimTicks=aimDelay(attempt,step);return false;}
+            if(!attempt.visible()) {attempt=findAttempt(target,step);attempt.aim();attempt.sendRotation();aimTicks=aimDelay(attempt,step);return false;}
         }
         }catch(IllegalStateException error) {
             rejectedViews.add(mc.player.blockPosition().immutable());
             if(rejectedViews.size()>=12)throw placementFailure(block,target,error);
             navigator.stop();attempt=null;bucketAim=null;aimedTarget=null;return false;
         }
+        // Preserve a route to the verified exterior/restock anchor. If a last wall would
+        // close the passage, select an exterior stance and place it from that side instead.
+        if(step.kind()==PlacementRecipes.Kind.PLACE && !exitGuard.canPlace(target,expected)) {
+            escapeViewRequired=true;
+            rejectedViews.add(mc.player.blockPosition().immutable());
+            navigator.stop();attempt=null;bucketAim=null;aimedTarget=null;
+            if(rejectedViews.size()>=12)throw new IllegalStateException(exitGuard.reason());
+            return false;
+        }
         moveTicks=0;return true;
     }
+    private List<BlockPos> preferredExitPositions() {
+        var positions=new ArrayList<BlockPos>();
+        for(var chest:chests.current())for(var direction:net.minecraft.core.Direction.Plane.HORIZONTAL)
+            for(int dy=-1;dy<=1;dy++)positions.add(chest.pos().relative(direction).offset(0,dy,0));
+        return positions;
+    }
     private int aimDelay(NativePlacement.Attempt candidate,PlacementRecipes.Step step) {
+        // Piston/observer direction uses server-side head yaw, updated by Player.aiStep
+        // after movement packets. Hold the requested look across complete server ticks.
+        boolean oriented=step.state().getProperties().stream()
+            .anyMatch(p->p.getName().equals("facing") || p.getName().equals("rotation"));
+        if(oriented)return 3;
         if(candidate.crouch())return 2;
-        if(candidate.air())return 1;
-        return step.state().getProperties().stream().anyMatch(p->p.getName().equals("facing") || p.getName().equals("rotation"))?1:0;
+        return candidate.air()?1:0;
     }
     private NativePlacement.Attempt findAttempt(BlockPos target,PlacementRecipes.Step step) {
         return step.kind()==PlacementRecipes.Kind.INTERACT?NativePlacement.interact(target):step.kind()==PlacementRecipes.Kind.AIR_USE?NativePlacement.airUse(target,step):NativePlacement.find(target,step);

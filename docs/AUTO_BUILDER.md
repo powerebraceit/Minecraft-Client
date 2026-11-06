@@ -260,3 +260,21 @@ gång. Målet åtta block bort nåddes på en rak **3,86 blocks gångväg**, med
 klickräckvidd **4,494 block**, trots räckviddsattributet åtta. Hela speltestet och
 **73 enhetstester** passerade. Dessa siffror gäller testfallen på den lokala
 servern; restock, terräng och serverfördröjning påverkar andra byggen.
+
+
+## Separat A*-motor och placeringsloop i 1.10.0
+
+Se [Java-kod, ansvarsfördelning och körbart exempel](BUILDER_ALGORITHM.md).
+`AStarPathfinder` söker bland säkra, synliga ståplatser. Terrängpaket från servern
+ogiltigförklarar berörda vägar, även när det är byggarens egna block. Väntan på
+rätt serverbekräftat blockstate är separat från rörelse och rotation. Den inbyggda
+adaptern väntar upp till 200 klientticks på en placering innan den pausar; den
+skickar inte samma klick igen utan kontroll.
+
+Inför en kolliderande placering kontrolleras en fortsatt väg till en verifierad
+utgång utanför schemats X/Z-område, i första hand nära en registrerad restock-kista.
+Kontrollen använder en skrivskyddad världskopia med just den tänkta ändringen.
+Om passagen skulle stängas söker byggaren en ståplats på utsidan. Utvägssökningen
+är begränsad till 48 block horisontellt, 16 vertikalt och 4096 expanderade noder;
+kan ingen sådan utväg verifieras kan bygget pausa. Det är ingen allmän planering
+av ställningar eller broar.

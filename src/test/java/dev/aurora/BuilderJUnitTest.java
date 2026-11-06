@@ -207,4 +207,23 @@ public final class BuilderJUnitTest {
         assertEquals(List.of(lower,upper),driver.requests);
     }
 
+    @Test void configurableLagTimeoutNeverResendsAnUnconfirmedAction() {
+        var driver=new Driver();driver.inventory.put("minecraft:stone",2);
+        var session=new BuildSession(new BuildPlan(List.of(block(0),block(1))),200);
+        assertTrue(session.start(driver));session.tick(driver);
+        assertEquals(BuildSession.Phase.WAITING_ACK,session.phase());
+        for(int tick=0;tick<150;tick++)session.tick(driver);
+        assertEquals(List.of(block(0)),driver.requests);
+        assertEquals(BuildSession.State.BUILDING,session.state());
+        driver.placed.add(block(0));session.tick(driver);
+        assertEquals(List.of(block(0),block(1)),driver.requests);
+        for(int tick=0;tick<200;tick++)session.tick(driver);
+        assertEquals(BuildSession.State.PAUSED,session.state());
+        assertEquals(2,driver.requests.size());assertEquals(BuildSession.Phase.STOPPED,session.phase());
+    }
+    @Test void invalidAcknowledgementTimeoutIsRejected() {
+        var plan=new BuildPlan(List.of(block(0)));
+        assertThrows(IllegalArgumentException.class,()->new BuildSession(plan,0));
+        assertThrows(IllegalArgumentException.class,()->new BuildSession(plan,1201));
+    }
 }
