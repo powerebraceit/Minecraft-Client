@@ -1,0 +1,19 @@
+name: Core checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: bash scripts/test-core.sh
+      - run: java -Djava.awt.headless=true -cp build/classes dev.aurora.DesignPreview
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-design-preview
+          path: build/design-preview.png
