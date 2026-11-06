@@ -17,13 +17,13 @@ import net.minecraft.world.phys.shapes.Shapes;
 
 /** Extract on the game thread, submit native textured models on the render thread. */
 public final class SchematicPreview {
-    public static final int MISSING_COLOR=0xffff4d61, WRONG_COLOR=0xffffd447, GHOST_COLOR=0x88ffffff;
+    public static final int MISSING_COLOR=0xffff4d61, WRONG_COLOR=0xffffd447, GHOST_COLOR=0xb3ffffff;
     public enum Match { CORRECT, MISSING, WRONG }
     public static Match match(BlockState expected,BlockState actual) {
         return expected==actual?Match.CORRECT:actual.isAir()?Match.MISSING:Match.WRONG;
     }
     public record Expected(BlockPos pos,BlockState state) { }
-    public record Ghost(BlockPos pos,Vec3 offset,BlockModelRenderState model,int outlineColor) { }
+    public record Ghost(BlockPos pos,Vec3 offset,BlockModelRenderState model,int outlineColor,int opacityColor) { }
     private final BuilderRuntime builder;
     private final Map<ChunkPos,List<Expected>> chunks=new HashMap<>();
     private List<Ghost> lastExtracted=List.of();
@@ -60,7 +60,7 @@ public final class SchematicPreview {
             var tints=model.tintLayers();tints.clear();
             for(var tint:mc.getBlockColors().getTintSources(expected))tints.add(0xff000000 | tint.colorInWorld(expected,mc.level,pos));
             int color=match(expected,mc.level.getBlockState(pos))==Match.MISSING?MISSING_COLOR:WRONG_COLOR;
-            ghosts.add(new Ghost(pos,expected.getOffset(pos),model,color));
+            ghosts.add(new Ghost(pos,expected.getOffset(pos),model,color,(Math.clamp(builder.previewOpacity(),10,90)*255/100<<24)|0xffffff));
         }
         lastExtracted=List.copyOf(ghosts);target.aurora$ghosts(lastExtracted);
     }
@@ -68,7 +68,7 @@ public final class SchematicPreview {
         var ghosts=((SchematicPreviewState)state).aurora$ghosts();
         if(ghosts.isEmpty())return;
         var pose=new PoseStack();Vec3 camera=state.cameraRenderState.pos;
-        var specialOutput=new GhostModelCollector(output.order(0));
+        var specialOutput=new GhostModelCollector(output.order(0),ghosts.getFirst().opacityColor());
         for(var ghost:ghosts) {
             pose.pushPose();pose.translate(ghost.pos().getX()-camera.x,ghost.pos().getY()-camera.y,ghost.pos().getZ()-camera.z);
             pose.pushPose();pose.translate(ghost.offset());

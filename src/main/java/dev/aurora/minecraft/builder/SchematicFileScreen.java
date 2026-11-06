@@ -66,10 +66,15 @@ public final class SchematicFileScreen extends Screen {
             .whenComplete((document,error)->minecraft.execute(()->{
                 if(request!=generation || minecraft.gui.screen()!=this)return;loading=false;
                 if(error!=null){Throwable cause=error.getCause()==null?error:error.getCause();status=cause.getMessage()==null?"Could not read schematic":cause.getMessage();return;}
-                try {
-                    client.builder().load(document);minecraft.gui.setScreen(parent);
-                    if(startAfterSelection)client.builder().start();
-                }catch(RuntimeException e){status=e.getMessage();cancelPendingStart();minecraft.gui.setScreen(this);}
+                try {client.builder().load(document);}
+                catch(RuntimeException failure){status=failure.getMessage();cancelPendingStart();return;}
+                if(!startAfterSelection) {minecraft.gui.setScreen(new MaterialListScreen(parent,client));return;}
+                minecraft.gui.setScreen(null);
+                try {client.builder().start();}
+                catch(RuntimeException failure) {
+                    cancelPendingStart();
+                    minecraft.gui.setScreen(new MaterialListScreen(parent,client,"Auto build paused: "+failure.getMessage()));
+                }
             }));
     }
     private int visibleRows() { return Math.max(1,(height-112)/24); }

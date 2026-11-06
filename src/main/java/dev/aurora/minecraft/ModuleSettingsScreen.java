@@ -41,17 +41,7 @@ public final class ModuleSettingsScreen extends Screen {
             }
             client.config().setting(module.id(), "key", Integer.toString(key));
         });
-        if (HUD_MODULES.contains(module.id())) {
-            flag("Background", "background", true);
-            flag("Text shadow", "text_shadow", false);
-            row(() -> "Accent: #" + Integer.toHexString(client.config().number(module.id(), "accent", COLORS[0]) & 0xffffff), () -> {
-                int current = client.config().number(module.id(), "accent", COLORS[0]);
-                int next = 0;
-                for (int i = 0; i < COLORS.length; i++) if (COLORS[i] == current) next = (i + 1) % COLORS.length;
-                client.config().setting(module.id(), "accent", Integer.toString(COLORS[next]));
-            });
-            row(() -> "Reset HUD position", () -> client.config().resetHudPosition(module.id()));
-        }
+        if (HUD_MODULES.contains(module.id()) && !module.id().equals("auto_builder"))hudOptions();
         if (module.id().equals("auto_builder")) {
             var builder = client.builder();
             row(() -> "Choose .litematic file...", () -> minecraft.gui.setScreen(new dev.aurora.minecraft.builder.SchematicFileScreen(this,client)));
@@ -70,6 +60,10 @@ public final class ModuleSettingsScreen extends Screen {
                 client.config().setting("auto_builder", "preview", Boolean.toString(enabled));
             });
             row(() -> "Move schematic corner to your feet", () -> { builder.stop("Placement moved"); builder.cornerAtFeet(); });
+            row(() -> "Preview opacity: "+builder.previewOpacity()+"%",()->{
+                int current=builder.previewOpacity();int next=current<40?40:current<55?55:current<70?70:current<85?85:25;
+                client.config().setting("auto_builder","preview_opacity",Integer.toString(next));
+            });
             actionKey("Corner key", "anchor_key", 10);
             actionKey("Bind restock chest key", "restock_key", 25);
             row(() -> "Restock chests: " + (minecraft.level == null ? 0 : builder.chests.current().size()), () -> { });
@@ -89,6 +83,7 @@ public final class ModuleSettingsScreen extends Screen {
                 builder.chests.save(builder.chests.all().stream().filter(chest -> !chest.dimension().equals(builder.chests.dimension())).toList());
                 builder.restock.invalidate();
             });
+            hudOptions();
         }
         if (module.id().equals("zoom")) {
             row(() -> "Zoom: " + client.config().number("zoom", "factor", 4) + "x", () -> {
@@ -98,6 +93,18 @@ public final class ModuleSettingsScreen extends Screen {
             flag("Smooth zoom", "smooth", true);
         }
         if (module.id().equals("chat_timestamps")) flag("Show seconds", "seconds", false);
+    }
+
+    private void hudOptions() {
+            flag("Background", "background", true);
+            flag("Text shadow", "text_shadow", false);
+            row(() -> "Accent: #" + Integer.toHexString(client.config().number(module.id(), "accent", COLORS[0]) & 0xffffff), () -> {
+                int current = client.config().number(module.id(), "accent", COLORS[0]);
+                int next = 0;
+                for (int i = 0; i < COLORS.length; i++) if (COLORS[i] == current) next = (i + 1) % COLORS.length;
+                client.config().setting(module.id(), "accent", Integer.toString(COLORS[next]));
+            });
+            row(() -> "Reset HUD position", () -> client.config().resetHudPosition(module.id()));
     }
 
     private void actionKey(String label, String setting, int fallback) {

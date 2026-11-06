@@ -15,16 +15,19 @@ public final class MaterialListScreen extends Screen {
     private final Screen parent;
     private final AuroraClient client;
     private int scroll;
-    public MaterialListScreen(Screen parent,AuroraClient client) {super(Component.literal("Schematic materials"));this.parent=parent;this.client=client;}
-    public static ItemStack stack(String item) {return new ItemStack(BuiltInRegistries.ITEM.getValue(Identifier.parse(item)));}
+    private final String notice;
+    public MaterialListScreen(Screen parent,AuroraClient client) {this(parent,client,"");}
+    public MaterialListScreen(Screen parent,AuroraClient client,String notice) {super(Component.literal("Schematic materials"));this.parent=parent;this.client=client;this.notice=notice;}
+    public static ItemStack stack(String item) {return item.isEmpty()?ItemStack.EMPTY:new ItemStack(BuiltInRegistries.ITEM.getValue(Identifier.parse(item)));}
     @Override protected void init() {
+        addRenderableWidget(Button.builder(Component.literal("Preview in world"),b->minecraft.gui.setScreen(null)).bounds(12,height-28,110,20).build());
         addRenderableWidget(Button.builder(Component.literal("Back"),b->onClose()).bounds(width-67,height-28,55,20).build());
     }
     @Override public void extractRenderState(GuiGraphicsExtractor graphics,int mouseX,int mouseY,float partialTick) {
         var builder=client.builder();var canvas=new MinecraftCanvas(graphics,font);
         canvas.roundedRect(0,0,width,height,0,0xee111522);
         canvas.text("SCHEMATIC MATERIALS",12,12,14,0xffedf1ff);
-        canvas.text(font.plainSubstrByWidth(builder.schematicName(),width-24),12,34,9,0xffb5accf);
+        canvas.text(font.plainSubstrByWidth(builder.document()==null?builder.schematicName():builder.document().file().getFileName().toString(),width-24),12,34,9,0xffb5accf);
         if(!builder.documentInWorld() || builder.materials()==null) {
             canvas.text(font.plainSubstrByWidth(builder.documentInWorld()?builder.materialsError():"Select a file and anchor it in this world first",width-24),12,66,9,0xffffce7a);
         }else {
@@ -37,11 +40,12 @@ public final class MaterialListScreen extends Screen {
                 var row=rows.get(i);int y=73+(i-scroll)*24,have=inventory.getOrDefault(row.item(),0),missing=Math.max(0,row.remaining()-have);
                 canvas.roundedRect(12,y,width-24,22,4,i%2==0?0xff252b40:0xff1c2235);
                 ItemStack stack=stack(row.item());graphics.item(stack,16,y+3);
-                canvas.text(font.plainSubstrByWidth(stack.getHoverName().getString(),nameWidth-29),37,y+7,9,0xffedf1ff);
+                canvas.text(font.plainSubstrByWidth((stack.isEmpty()?row.name():stack.getHoverName().getString())+(row.manual()?" *":""),nameWidth-29),37,y+7,9,0xffedf1ff);
                 int[] counts={row.total(),row.remaining(),have,missing};
                 for(int col=0;col<4;col++)canvas.text(Integer.toString(counts[col]),start+col*49,y+7,9,col==3 && missing>0?0xffffce7a:row.remaining()==0?0xff8cdea4:0xffedf1ff);
             }
-            canvas.text("Left: "+builder.materials().remainingItems()+" items | Have: player inventory | Scroll for more",12,height-42,8,0xffb5accf);
+            String footer=!notice.isBlank()?notice:builder.materials().hasManualBlocks()?"* Manual block count; automatic placement is unavailable. Other materials are still listed.":"Left: "+builder.materials().remainingItems()+" | Have: main inventory | Scroll for more";
+            canvas.text(font.plainSubstrByWidth(footer,width-24),12,height-42,8,0xffb5accf);
         }
         super.extractRenderState(graphics,mouseX,mouseY,partialTick);
     }

@@ -5,7 +5,7 @@ lila accenter, fem modulkategorier och sökning över alla kategorier.
 
 ## Ladda ner och installera
 
-1. [Ladda ner aurora-client-1.5.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.5.0/releases/1.5.0/aurora-client-1.5.0.jar).
+1. [Ladda ner aurora-client-1.5.1.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.5.1/releases/1.5.1/aurora-client-1.5.1.jar).
 2. Installera [Fabric Loader](https://fabricmc.net/use/installer/) **0.20.1 eller senare** för **Minecraft 26.3**.
 3. Lägg JAR-filen i `mods`-mappen för den Minecraft-instans du använder.
    I en vanlig Windows-installation är det `%APPDATA%\.minecraft\mods`.
@@ -41,11 +41,12 @@ menytangent, stäng spelet och ta bort raden `menu.key` från konfigurationsfile
 Auto Builder läser **`.litematic`-filer direkt från din dator**. Du behöver varken
 Litematica eller MaLiLib. Öppna World och högerklicka på **Auto Builder**, välj
 **Choose .litematic file...** och klicka på din fil. Filväljaren har mappar,
-sökvägsfält samt Go, Up och Home. När du aktiverar modulen utan att ha valt en fil
+sökvägsfält samt Go, Up och Home. Efter filval öppnas materiallistan för den valda
+filen direkt. **Preview in world** visar blocken i världen utan att starta bygget. När du aktiverar modulen utan att ha valt en fil
 öppnas filväljaren automatiskt; Back eller Escape avbryter starten.
 
 Förhandsvisningen visar schemats **riktiga blockmodeller och texturer med cirka
-53 % opacitet**. Röda ramar visar saknade block; gula ramar visar fel block eller
+70 % opacitet (kan ändras i Auto Builder-inställningarna)**. Röda ramar visar saknade block; gula ramar visar fel block eller
 fel blockstate, till exempel en felvänd trappa. Rätt placerade block döljs ur
 previewn. Gräver du bort ett sådant block visas dess röda preview igen.
 **G** flyttar schemats lägsta hörn
@@ -59,11 +60,15 @@ serverbekräftat lagerbygge har testats i Minecraft 26.3 survival **utan externa
 schematic-moddar**, med en riktig testfil som innehåller sten, en riktad trappa
 och en dubbel slab. Se [användning och begränsningar](docs/AUTO_BUILDER.md).
 
-Material-HUD:en visar återstående antal per material och vad du har i inventory.
+Material-HUD:en visar den valda filens namn och **återstående / totalt** per material.
+Även färdiga material visas, och listan fungerar när byggmodulen är avstängd.
 Du kan flytta panelen med chatten öppen. Högerklicka Auto Builder och välj
 **Material list...** för hela listan med ikoner och kolumnerna **Total**, **Left**,
-**Have** och **Missing**. **Have** räknar spelarens inventory. **Materials HUD**
-slår av/på den kompakta listan; **Background** ändrar dess bakgrund.
+**Have** och **Missing**. **Have** räknar spelarens huvudinventory och hotbar. **Materials HUD**
+slår av/på den kompakta listan; **Background** ändrar dess bakgrund. När du väljer
+en ny fil visas preview och material-HUD automatiskt igen. Materiallistan är
+oberoende av byggplanen: exempelvis vatten får en rad märkt `*` för manuellt
+arbete och döljer inte övriga material.
 
 ![Texturerade block med röda/gula ramar och materiallista](docs/minecraft-schematic-preview.png)
 
@@ -127,7 +132,7 @@ spel- och resursservrar. Gradle-versionen är låst i wrappern och verifieras me
 ```
 
 På Windows: `gradlew.bat build`. Installationsfilen skapas i
-`build/libs/aurora-client-1.5.0.jar`; filen med `-sources` är källkod.
+`build/libs/aurora-client-1.5.1.jar`; filen med `-sources` är källkod.
 
 ```bash
 ./gradlew runClient     # interaktiv utvecklingsklient
@@ -150,10 +155,12 @@ sparade HUD-positioner, vanlig chattinmatning och ändrad GUI-skala.
 Testet sparar skärmbilder och en resultatfil; Gradle misslyckas om kontrollerna inte slutförs.
 
 Bygget kör även 34 grundkontroller, sex tester för HUD-positioner, två tester för modulinställningar,
-sju tester för byggplanering, tre tester för gångvägar, sex tester för `.litematic`-läsaren och fyra tester för preview/materialantal via JUnit.
+sju tester för byggplanering, tre tester för gångvägar, sex tester för `.litematic`-läsaren och sex tester för preview/materialantal via JUnit.
 Speltestet verifierar dessutom filval, avbruten filväljare, texturerad preview,
 röda/gula ramar, döljning av rätt placerade block, återvisning efter borttagning,
-materiallistor, flyttning av material-HUD och G-ankring,
+materiallistor, flyttning av material-HUD och G-ankring. Bildkontroller jämför
+pixlar inne på blockytan med preview på/av i både vanligt och förbättrat
+transparensläge. Tester för blandade scheman med vatten och byte av vald fil körs också, liksom
 restock och ett faktiskt survival-bygge i två lager med trappa och dubbel slab. Speltestet har körts
 lokalt på Minecraft **26.3**, Fabric Loader **0.20.1**, Java **25** och Linux med
 Mesa-mjukvarurendering. Windows, andra modpaket och inloggad multiplayer har inte

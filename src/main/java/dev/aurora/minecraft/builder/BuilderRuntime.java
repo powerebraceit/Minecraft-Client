@@ -22,10 +22,11 @@ public final class BuilderRuntime implements BuildSession.Driver {
     public SchematicMaterials materials() {return materials;}
     public String materialsError() {return materialsError;}
     public boolean documentInWorld() {return document!=null && documentWorld==Minecraft.getInstance().level;}
+    public int previewOpacity() {return client.config().number("auto_builder","preview_opacity",70);}
     public boolean previewVisible() {return documentInWorld() && client.config().flag("auto_builder","preview",true);}
     private void refreshSchematic() {
         preview.reset(document,anchor);
-        try {materials=new SchematicMaterials(document.at(anchor));materials.tick(Minecraft.getInstance().level);materialsError="";}
+        try {materials=new SchematicMaterials(document,anchor);materials.tick(Minecraft.getInstance().level);materialsError="";}
         catch(RuntimeException error) {materials=null;materialsError=error.getMessage();}
     }
     private DirectSchematic document;
@@ -43,6 +44,9 @@ public final class BuilderRuntime implements BuildSession.Driver {
         if(mc.player==null)throw new IllegalStateException("Join a world before selecting a schematic");
         stop("Schematic loaded");document=selected;anchor=mc.player.blockPosition().immutable();documentWorld=mc.level;session=null;
         client.config().setting("auto_builder","last_file",selected.file().toString());client.save();
+        client.config().setting("auto_builder","preview","true");
+        client.config().setting("auto_builder","materials_hud","true");
+        client.save();
         refreshSchematic();message="Loaded "+selected.name();
     }
     public void cornerAtFeet() {

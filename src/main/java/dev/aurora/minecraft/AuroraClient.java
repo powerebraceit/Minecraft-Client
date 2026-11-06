@@ -25,6 +25,7 @@ public final class AuroraClient implements ClientModInitializer {
     private double zoomFactor = 1;
     private long lastZoomNanos;
 
+    public String version() {return FabricLoader.getInstance().getModContainer("aurora").orElseThrow().getMetadata().getVersion().toString();}
     public static AuroraClient instance() { return instance; }
     public ModuleRegistry modules() { return modules; }
     public ClientConfig config() { return config; }

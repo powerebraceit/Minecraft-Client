@@ -56,24 +56,29 @@ public final class AuroraHud {
 
     private static void renderMaterials(GuiGraphicsExtractor graphics,boolean editing) {
         var client=AuroraClient.instance();var builder=client.builder();var mc=Minecraft.getInstance();
-        if(!builder.documentInWorld() || builder.materials()==null || !client.config().flag("auto_builder","materials_hud",true))return;
-        var all=builder.materials().rows().stream().filter(r->r.remaining()>0).toList();
+        if(!builder.documentInWorld() || !client.config().flag("auto_builder","materials_hud",true))return;
+        if(builder.materials()==null) {
+            Bounds error=place("auto_builder",Math.min(240,graphics.guiWidth()-16),60,graphics,8,28);background(graphics,"auto_builder",error,editing);
+            graphics.text(mc.font,"Schematic materials",error.x()+8,error.y()+8,0xffc4baff,false);
+            graphics.text(mc.font,mc.font.plainSubstrByWidth(builder.materialsError(),error.width()-16),error.x()+8,error.y()+26,0xffffce7a,false);return;
+        }
+        var all=builder.materials().rows();
         int count=Math.min(6,all.size()),width=Math.min(210,graphics.guiWidth()-16);
-        int height=40+count*20+(all.size()>count?14:0);
+        int height=54+count*20+(all.size()>count?14:0);
         Bounds bounds=place("auto_builder",width,height,graphics,graphics.guiWidth()-width-8,28);
         background(graphics,"auto_builder",bounds,editing);
         boolean shadow=client.config().flag("auto_builder","text_shadow",false);
-        graphics.text(mc.font,"Materials left: "+builder.materials().remainingItems(),bounds.x()+8,bounds.y()+8,0xffc4baff,shadow);
-        graphics.text(mc.font,"Item: left / have in inventory",bounds.x()+8,bounds.y()+22,0xff8a93ad,shadow);
-        var inventory=builder.inventory();
+        graphics.text(mc.font,mc.font.plainSubstrByWidth(builder.document().file().getFileName().toString(),width-16),bounds.x()+8,bounds.y()+8,0xffc4baff,shadow);
+        graphics.text(mc.font,"Materials left: "+builder.materials().remainingItems(),bounds.x()+8,bounds.y()+22,0xffedf1ff,shadow);
+        graphics.text(mc.font,"Block / item: left / total",bounds.x()+8,bounds.y()+36,0xff8a93ad,shadow);
         for(int i=0;i<count;i++) {
-            var row=all.get(i);int y=bounds.y()+37+i*20;
+            var row=all.get(i);int y=bounds.y()+51+i*20;
             var stack=dev.aurora.minecraft.builder.MaterialListScreen.stack(row.item());
             graphics.item(stack,bounds.x()+7,y-2);
-            String amount=row.remaining()+" / "+inventory.getOrDefault(row.item(),0);
+            String amount=row.remaining()+" / "+row.total();
             int amountWidth=mc.font.width(amount);
-            graphics.text(mc.font,mc.font.plainSubstrByWidth(stack.getHoverName().getString(),Math.max(10,width-40-amountWidth)),bounds.x()+27,y+2,0xffedf1ff,shadow);
-            graphics.text(mc.font,amount,bounds.x()+width-8-amountWidth,y+2,0xffffce7a,shadow);
+            graphics.text(mc.font,mc.font.plainSubstrByWidth((stack.isEmpty()?row.name():stack.getHoverName().getString())+(row.manual()?" *":""),Math.max(10,width-40-amountWidth)),bounds.x()+27,y+2,0xffedf1ff,shadow);
+            graphics.text(mc.font,amount,bounds.x()+width-8-amountWidth,y+2,row.remaining()==0?0xff8cdea4:0xffffce7a,shadow);
         }
         if(all.size()>count)graphics.text(mc.font,"+"+(all.size()-count)+" types in Material list",bounds.x()+8,bounds.y()+height-12,0xff8a93ad,shadow);
     }

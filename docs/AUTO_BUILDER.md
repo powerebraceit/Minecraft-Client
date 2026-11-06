@@ -11,9 +11,13 @@ schemat till någon tjänst.
    `schematics`-mapp eller senast använda mapp. Klicka på en mapp för att öppna den
    och på en `.litematic`-fil för att välja den. Sökvägsfältet och **Go** kan öppna
    en annan mapp eller fil. **Up** går upp en mapp; **Home** öppnar din hemmapp.
+   Efter filval visas materiallistan direkt. **Preview in world** stänger menyerna
+   och visar schemats block på rätt plats.
 3. Aktivera **Preview** om den är avstängd. Schemat visas med genomskinliga, texturerade
    blockmodeller. Röda ramar betyder saknat block, gula ramar betyder fel block
-   eller fel blockstate. Ett rätt placerat block döljs, och visas igen om det tas bort. **G**, eller **Move schematic corner to your feet**, flyttar
+   eller fel blockstate. Blockens egna texturer behåller sina färger; endast ramen
+   är röd/gul. Opaciteten är 70 % från början och kan ändras med **Preview opacity**.
+   Ett rätt placerat block döljs, och visas igen om det tas bort. **G**, eller **Move schematic corner to your feet**, flyttar
    schemats gemensamma lägsta hörn till blockpositionen vid dina fötter.
 4. Titta på en kista och tryck **V** för att registrera den som restock-kista.
    Samma tangent på samma kista tar bort den. Dubbelkistans två halvor räknas som
@@ -41,11 +45,20 @@ föremålsikoner. Scrolla för att se resten av en lång lista.
 | Missing | `max(0, Left − Have)`. Kistornas innehåll ingår inte i denna kolumn. |
 
 En kompakt material-HUD visar upp till sex återstående material och deras
-**Left / Have**. Hela listan finns alltid i inställningarna. Panelen visas även
+**Left / Total**. Filnamnet visas på panelen och färdiga material finns kvar med
+antalet noll återstående. Hela listan finns alltid i inställningarna. Panelen visas även
 när du bara granskar schemat med byggmodulen avstängd. Dra den med **T**-chatten
 öppen, precis som övriga HUD-paneler. Auto Builder-inställningarna har
 **Materials HUD**, **Background**, textskugga, accent och återställning av position.
-Preview och material-HUD kan slås av/på var för sig.
+Preview och material-HUD kan slås av/på var för sig. Ett nytt filval slår på båda
+igen så att det laddade schemat och dess lista blir synliga. Sparad HUD-position
+behålls.
+
+Listan byggs direkt från den valda filen och är oberoende av byggplanens krav.
+Ett block utan direkt föremål, exempelvis vatten, får en manuell blockrad märkt
+`*` och räknas som block, inte som antal hinkar. Det hindrar inte övriga material
+från att visas. Automatiskt byggande gör fortfarande sin egen kontroll av vilka
+block det kan placera.
 
 Listan följer placeringar och borttagningar i världen. För stora scheman sprids
 kontrollen över flera ticks; serverns enskilda blockuppdateringar uppdaterar den
@@ -108,7 +121,9 @@ saknade material verifieras också.
 Läsarens sex enhetstester täcker bland annat negativa dimensioner, packade bitar
 över long-gränser, flera regioner, felaktiga filer, klassisk blockpalett och
 materialantal för dörrar/dubbla slabs. Dörrar och sängar har inte speltestats.
-Fyra ytterligare enhetstester täcker färgklassificering, materialändring vid
-placering/borttagning, delvis placerade dubbla slabs och dörröverdelar.
+Sex ytterligare enhetstester täcker färgklassificering, materialändring vid
+placering/borttagning, delvis placerade dubbla slabs, dörröverdelar, vatten i en blandad fil och byte av
+valt schema. Speltestet jämför dessutom bilder med preview på/av och kontrollerar
+att blockytans inre pixlar faktiskt ritas i vanligt och förbättrat transparensläge.
 Testerna har körts på Linux med Java 25 och Fabric Loader 0.20.1. Windows, inloggad
 multiplayer och andra modkombinationer har inte verifierats i den här miljön.

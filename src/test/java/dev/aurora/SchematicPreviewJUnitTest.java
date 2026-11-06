@@ -59,4 +59,21 @@ class SchematicPreviewJUnitTest {
         world.states.put(pos.above(),upper);materials.changed(pos.above(),world);assertEquals(0,materials.remainingItems());
         world.states.remove(pos.above());materials.changed(pos.above(),world);assertEquals(1,materials.remainingItems());
     }
+    @Test void unsupportedAutomaticPlacementDoesNotHideTheSelectedFilesMaterials() {
+        var pos=BlockPos.ZERO;
+        var selected=document(Map.of(pos,Blocks.STONE.defaultBlockState(),pos.above(),Blocks.WATER.defaultBlockState()));
+        assertThrows(IllegalStateException.class,()->selected.at(BlockPos.ZERO));
+        var materials=new SchematicMaterials(selected,BlockPos.ZERO);materials.tick(new World());
+        assertEquals(2,materials.rows().size());
+        assertEquals(1,materials.rows().stream().filter(r->r.item().equals("minecraft:stone")).findFirst().orElseThrow().total());
+        assertTrue(materials.rows().stream().anyMatch(r->r.manual() && r.total()==1));
+        assertTrue(materials.hasManualBlocks());
+    }
+    @Test void selectingAnotherDocumentReplacesMaterialTypesAndCounts() {
+        var first=new SchematicMaterials(document(Map.of(BlockPos.ZERO,Blocks.STONE.defaultBlockState())),BlockPos.ZERO);
+        var second=new SchematicMaterials(document(Map.of(BlockPos.ZERO,Blocks.OAK_PLANKS.defaultBlockState(),BlockPos.ZERO.above(),Blocks.OAK_PLANKS.defaultBlockState())),BlockPos.ZERO);
+        assertEquals(1,first.totalItems());assertEquals(2,second.totalItems());
+        assertEquals("minecraft:oak_planks",second.rows().getFirst().item());assertEquals(1,second.rows().size());
+    }
+
 }

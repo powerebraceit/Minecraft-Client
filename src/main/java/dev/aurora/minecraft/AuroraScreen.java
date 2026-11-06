@@ -33,6 +33,7 @@ public final class AuroraScreen extends Screen {
         graphics.pose().scale(scale, scale);
         gui.render(new MinecraftCanvas(graphics, font), Math.round(width / scale), Math.round(height / scale), mouseX / scale, mouseY / scale, delta);
         graphics.pose().popMatrix();
+        graphics.text(font,"Aurora "+client.version(),8,graphics.guiHeight()-12,0xff9b8aff,false);
     }
 
     @Override public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {

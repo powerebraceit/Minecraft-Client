@@ -1,44 +1,77 @@
 package dev.aurora.minecraft.builder;
 
-import dev.aurora.core.builder.BuildPlan;
 import java.util.*;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.block.SlabBlock;
-import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.level.block.*;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.*;
 
-/** Tracks remaining items, including server changes, without scanning a large schematic every frame. */
+/** A checklist of the selected file, independent of whether automatic placement supports every block. */
 public final class SchematicMaterials {
-    public record Row(String item, int total, int remaining) { }
-    private final DirectSchematic.Snapshot schematic;
-    private final List<BuildPlan.Block> blocks;
+    public record Row(String item, String name, int total, int remaining, boolean manual) { }
+    private record Entry(BlockPos pos,BlockState state,String key,int count,List<BlockPos> companions) { }
+    private final List<Entry> blocks=new ArrayList<>();
     private final Map<BlockPos,Integer> indices=new HashMap<>();
-    private final Map<String,Integer> total,remaining=new TreeMap<>();
+    private final Map<String,Row> totals=new TreeMap<>();
+    private final Map<String,Integer> remaining=new HashMap<>();
     private final int[] counts;
     private int cursor;
-    public SchematicMaterials(DirectSchematic.Snapshot schematic) {
-        this.schematic=schematic;blocks=schematic.plan().blocks();
-        total=BuildPlan.materials(blocks);remaining.putAll(total);counts=new int[blocks.size()];
-        for(int i=0;i<blocks.size();i++) {
-            var b=blocks.get(i);var pos=new BlockPos(b.x(),b.y(),b.z());indices.put(pos,i);counts[i]=b.count();
-            for(var companion:schematic.companions().getOrDefault(pos,List.of()))indices.put(companion,i);
+    public SchematicMaterials(DirectSchematic document,BlockPos anchor) {
+        Map<BlockPos,BlockState> world=new HashMap<>();
+        document.blocks().forEach((pos,state)->world.put(anchor.offset(pos),state));
+        expectedStates.putAll(world);
+        Map<BlockPos,List<BlockPos>> companions=new HashMap<>();Set<BlockPos> generated=new HashSet<>();
+        for(var e:world.entrySet()) {
+            BlockPos parent=parent(e.getKey(),e.getValue());
+            if(parent!=null && world.containsKey(parent) && world.get(parent).getBlock()==e.getValue().getBlock()) {
+                generated.add(e.getKey());companions.computeIfAbsent(parent,p->new ArrayList<>()).add(e.getKey());
+            }
         }
+        for(var e:world.entrySet()) {
+            if(generated.contains(e.getKey()))continue;
+            var state=e.getValue();var item=state.getBlock().asItem();
+            boolean manual=item==Items.AIR;
+            String id=manual?"":BuiltInRegistries.ITEM.getKey(item).toString();
+            String key=manual?"block:"+BuiltInRegistries.BLOCK.getKey(state.getBlock()):id;
+            String name=state.getBlock().getName().getString();
+            int count=state.getBlock() instanceof SlabBlock && state.getValue(SlabBlock.TYPE)==SlabType.DOUBLE?2:1;
+            var previous=totals.get(key);totals.put(key,new Row(id,name,count+(previous==null?0:previous.total()),0,manual));
+            remaining.merge(key,count,Integer::sum);
+            int index=blocks.size();indices.put(e.getKey(),index);
+            List<BlockPos> extra=List.copyOf(companions.getOrDefault(e.getKey(),List.of()));
+            for(var pos:extra)indices.put(pos,index);
+            blocks.add(new Entry(e.getKey(),state,key,count,extra));
+        }
+        counts=blocks.stream().mapToInt(Entry::count).toArray();
     }
-    public List<Row> rows() { return total.keySet().stream().sorted().map(item->new Row(item,total.get(item),remaining.getOrDefault(item,0))).toList(); }
+    /** Compatibility for the immutable integration-test/build snapshot. */
+    public SchematicMaterials(DirectSchematic.Snapshot snapshot) {
+        this(new DirectSchematic("Checklist",java.nio.file.Path.of("checklist.litematic"),snapshot.states()),BlockPos.ZERO);
+    }
+    private static BlockPos parent(BlockPos pos,BlockState state) {
+        if((state.getBlock() instanceof DoorBlock || state.getBlock() instanceof DoublePlantBlock) && state.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF)==DoubleBlockHalf.UPPER)return pos.below();
+        if(state.getBlock() instanceof BedBlock && state.getValue(BedBlock.PART)==BedPart.HEAD)return pos.relative(state.getValue(BedBlock.FACING).getOpposite());
+        return null;
+    }
+    public List<Row> rows() {return totals.entrySet().stream().map(e->{var r=e.getValue();return new Row(r.item(),r.name(),r.total(),remaining.getOrDefault(e.getKey(),0),r.manual());}).toList();}
     public int remainingItems() {return remaining.values().stream().mapToInt(Integer::intValue).sum();}
+    public int totalItems() {return totals.values().stream().mapToInt(Row::total).sum();}
+    public boolean hasManualBlocks() {return totals.values().stream().anyMatch(Row::manual);}
     public void changed(BlockPos pos,BlockGetter world) {var index=indices.get(pos);if(index!=null)refresh(index,world);}
     public void tick(BlockGetter world) {
-        // Polling also catches newly loaded chunks and local mining predictions. Packet updates are immediate.
         int budget=Math.min(16384,blocks.size());
         for(int i=0;i<budget;i++) {refresh(cursor,world);cursor=(cursor+1)%blocks.size();}
     }
     private void refresh(int index,BlockGetter world) {
-        var b=blocks.get(index);var pos=new BlockPos(b.x(),b.y(),b.z());
-        var expected=schematic.states().get(pos);var actual=world.getBlockState(pos);
-        boolean correct=actual==expected && schematic.companions().getOrDefault(pos,List.of()).stream().allMatch(p->world.getBlockState(p)==schematic.states().get(p));
+        var b=blocks.get(index);var expected=b.state();var actual=world.getBlockState(b.pos());
+        boolean correct=actual==expected && b.companions().stream().allMatch(p->world.getBlockState(p)==expectedStates.get(p));
         int needed=correct?0:b.count();
         if(!correct && expected.getBlock() instanceof SlabBlock && expected.getValue(SlabBlock.TYPE)==SlabType.DOUBLE
             && actual.getBlock()==expected.getBlock() && actual.getValue(SlabBlock.TYPE)!=SlabType.DOUBLE)needed=1;
-        if(needed!=counts[index]) {remaining.merge(b.item(),needed-counts[index],Integer::sum);counts[index]=needed;}
+        if(needed!=counts[index]) {remaining.merge(b.key(),needed-counts[index],Integer::sum);counts[index]=needed;}
     }
+    private final Map<BlockPos,BlockState> expectedStates=new HashMap<>();
 }

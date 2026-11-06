@@ -33,6 +33,7 @@ import net.minecraft.world.item.Items;
 /** Development-only integration runner. Never included in the distributed client JAR. */
 public final class SmokeCheck {
     private static int stage, ticks, stageTick, specialModelsBefore;
+    private static net.minecraft.client.renderer.state.level.CameraRenderState previewCamera;
     public static final java.util.concurrent.atomic.AtomicInteger SPECIAL_MODELS=new java.util.concurrent.atomic.AtomicInteger();
     private static boolean finished;
     private static int originalGuiScale;
@@ -55,12 +56,12 @@ public final class SmokeCheck {
         Minecraft mc = Minecraft.getInstance();
         ticks++;
         try {
-            if (ticks > 2400) throw new AssertionError("Timed out in stage " + stage);
+            if (ticks > 3600) throw new AssertionError("Timed out in stage " + stage);
             if (mc.gui.screen() instanceof AccessibilityOnboardingScreen screen) { screen.onClose(); return; }
             AuroraClient client = AuroraClient.instance();
             if (stage == 0 && mc.gui.screen() instanceof TitleScreen && mc.gui.overlay() == null) {
                 check(client != null && client.modules().all().stream().filter(m -> !m.id().equals("auto_builder")).allMatch(m -> m.available()), "All ten modules have game implementations");
-                mc.options.renderDistance().set(3);
+                mc.options.renderDistance().set(3);mc.options.improvedTransparency().set(false);
                 mc.options.simulationDistance().set(5);
                 mc.createWorldOpenFlows().createFreshLevel("aurora-smoke-" + System.currentTimeMillis(),
                     new LevelSettings("Aurora smoke test", GameType.CREATIVE,
@@ -246,6 +247,7 @@ public final class SmokeCheck {
                 check(mc.gui.screen() instanceof dev.aurora.minecraft.builder.SchematicFileScreen, "Enabling Auto Builder automatically opens the local file picker");
                 mc.gui.screen().onClose();
                 check(!client.modules().get("auto_builder").enabled(), "Cancelling the file picker cancels pending construction");
+                client.config().setting("auto_builder","preview","false");client.config().setting("auto_builder","materials_hud","false");
                 fileScreen=new dev.aurora.minecraft.builder.SchematicFileScreen(new AuroraScreen(client),client);
                 mc.gui.setScreen(fileScreen);fileScreen.browse(schematicFile.getParent());
                 stage=20;stageTick=ticks;
@@ -258,7 +260,10 @@ public final class SmokeCheck {
             } else if(stage==21 && client.builder().document()!=null && client.builder().document().file().equals(schematicFile)) {
                 check(!net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("litematica") && !net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("malilib"), "Schematic works without Litematica and MaLiLib installed");
                 check(client.builder().document().blocks().size()==4, "Selected real .litematic file decoded all block states");
+                check(mc.gui.screen() instanceof dev.aurora.minecraft.builder.MaterialListScreen,"Selecting a file immediately opens that file's full material list");
+                check(client.config().flag("auto_builder","preview",false) && client.config().flag("auto_builder","materials_hud",false),"Selecting a file shows its preview and material HUD even after previously hiding them");
                 mc.gui.setScreen(null);
+                client.config().hudPosition("auto_builder",new dev.aurora.core.HudLayout.Position(0,0.05));
                 mc.keyboardHandler.keyPress(mc.getWindow().handle(),1,new KeyEvent(InputConstants.KEY_G,0,0));
                 check(client.builder().anchor().equals(mc.player.blockPosition()), "G anchors the schematic corner at the player's feet");
                 stage=22;stageTick=ticks;
@@ -301,6 +306,21 @@ public final class SmokeCheck {
                 stage=260;stageTick=ticks;
             } else if(stage==260 && ticks-stageTick>10) {
                 capture("aurora-schematic-preview.png");
+                previewCamera=mc.gameRenderer.gameRenderState().levelRenderState.cameraRenderState;
+                client.config().setting("auto_builder","preview","false");stage=264;stageTick=ticks;
+            } else if(stage==264 && ticks-stageTick>15) {
+                capture("aurora-preview-classic-off.png");client.config().setting("auto_builder","preview","true");
+                mc.options.improvedTransparency().set(true);stage=261;stageTick=ticks;
+            } else if(stage==261 && ticks-stageTick>60 && mc.levelRenderer.hasRenderedAllSections()) {
+                check(mc.gameRenderer.useImprovedTransparency(),"Preview also runs with improved transparency enabled");
+                capture("aurora-preview-improved.png");client.config().setting("auto_builder","preview","false");
+                stage=262;stageTick=ticks;
+            } else if(stage==262 && ticks-stageTick>30 && mc.levelRenderer.hasRenderedAllSections()) {
+                capture("aurora-preview-off.png");stage=263;stageTick=ticks;
+            } else if(stage==263 && ticks-stageTick>15) {
+                verifyTexturePixels("aurora-schematic-preview.png","aurora-preview-classic-off.png");
+                verifyTexturePixels("aurora-preview-improved.png","aurora-preview-off.png");
+                client.config().setting("auto_builder","preview","true");mc.options.improvedTransparency().set(false);
                 mc.keyboardHandler.keyPress(mc.getWindow().handle(),1,new KeyEvent(InputConstants.KEY_T,0,0));
                 stage=27;stageTick=ticks;
             } else if(stage==27 && ticks-stageTick>10) {
@@ -339,6 +359,14 @@ public final class SmokeCheck {
             } else if(stage==30 && ticks-stageTick>15) {
                 check(SPECIAL_MODELS.get()>specialModelsBefore, "Native chest model geometry was submitted with translucency");
                 capture("aurora-special-preview.png");
+                var mixed=new dev.aurora.minecraft.builder.DirectSchematic("Mixed materials",schematicFile,java.util.Map.of(
+                    new net.minecraft.core.BlockPos(0,0,3),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),
+                    new net.minecraft.core.BlockPos(0,1,3),net.minecraft.world.level.block.Blocks.WATER.defaultBlockState()));
+                client.builder().load(mixed);stage=31;stageTick=ticks;
+            } else if(stage==31 && ticks-stageTick>10) {
+                check(client.builder().materials()!=null && client.builder().materials().rows().size()==2 && AuroraHud.panels().containsKey("auto_builder"),"Water in a selected schematic no longer hides the material list or HUD");
+                client.builder().load(dev.aurora.minecraft.builder.DirectSchematic.read(schematicFile));
+                check(client.builder().materials().rows().size()==3 && client.builder().materials().totalItems()==5,"Reselecting the file replaces the checklist with that file's materials");
                 fixtureBlocks = java.util.stream.IntStream.range(0, 7).mapToObj(i -> buildBlock(12+i,0)).toList();
                 client.builder().startSnapshot(fixtureSnapshot(fixtureBlocks));
                 stage = 11; stageTick = ticks;
@@ -355,6 +383,25 @@ public final class SmokeCheck {
             AuroraClient.LOG.error("AURORA SMOKE FAILED", error);
             try { Files.writeString(RESULT, "FAIL: " + error + "\n"); } catch (Exception ignored) { }
             mc.stop();
+        }
+    }
+
+    private static void verifyTexturePixels(String withPreview,String withoutPreview) throws Exception {
+        try(var on=com.mojang.blaze3d.platform.NativeImage.read(Files.readAllBytes(Path.of("screenshots",withPreview)));
+            var off=com.mojang.blaze3d.platform.NativeImage.read(Files.readAllBytes(Path.of("screenshots",withoutPreview)))) {
+            // Sample the centre of the missing stone's north face, well inside its coloured outline.
+            var point=new org.joml.Vector4f((float)(previewAnchor.getX()+0.5-previewCamera.pos.x),
+                (float)(previewAnchor.getY()+0.5-previewCamera.pos.y),(float)(previewAnchor.getZ()-0.002-previewCamera.pos.z),1);
+            point.mul(previewCamera.viewRotationMatrix).mul(previewCamera.projectionMatrix);
+            int x=Math.round((point.x/point.w*0.5f+0.5f)*on.getWidth()),y=Math.round((0.5f-point.y/point.w*0.5f)*on.getHeight());
+            check(x>8 && x<on.getWidth()-8 && y>8 && y<on.getHeight()-8,"Texture sampling point lies on screen at "+x+","+y);
+            int changed=0;long difference=0;
+            for(int dy=-5;dy<=5;dy++)for(int dx=-5;dx<=5;dx++) {
+                int a=on.getPixel(x+dx,y+dy),b=off.getPixel(x+dx,y+dy),delta=0;
+                for(int shift:new int[]{0,8,16})delta+=Math.abs((a>>>shift&255)-(b>>>shift&255));
+                difference+=delta;if(delta>15)changed++;
+            }
+            check(changed>90 && difference>3000,"Actual texture pixels fill the block face, beyond its outline: "+withPreview+" ("+changed+" pixels, delta "+difference+")");
         }
     }
 
