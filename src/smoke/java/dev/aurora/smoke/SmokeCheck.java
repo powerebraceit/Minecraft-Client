@@ -42,7 +42,8 @@ public final class SmokeCheck {
     private static net.minecraft.world.phys.Vec3 builderStart;
     private static java.util.List<dev.aurora.core.builder.BuildPlan.Block> fixtureBlocks;
     private static Path schematicFile,fluidFile;
-    private static net.minecraft.core.BlockPos fluidBase,sourcePool;
+    private static net.minecraft.core.BlockPos fluidBase,sourcePool,recipeBase;
+    private static java.util.List<dev.aurora.core.builder.BuildPlan.Block> recipeBlocks;
     private static java.util.List<dev.aurora.core.builder.BuildPlan.Block> fluidBlocks;
     private static net.minecraft.core.BlockPos previewAnchor;
     private static dev.aurora.minecraft.builder.SchematicFileScreen fileScreen;
@@ -58,7 +59,7 @@ public final class SmokeCheck {
         Minecraft mc = Minecraft.getInstance();
         ticks++;
         try {
-            if (ticks > 3600) throw new AssertionError("Timed out in stage " + stage);
+            if (ticks > 4800) throw new AssertionError("Timed out in stage " + stage);
             if (mc.gui.screen() instanceof AccessibilityOnboardingScreen screen) { screen.onClose(); return; }
             AuroraClient client = AuroraClient.instance();
             if (stage == 0 && mc.gui.screen() instanceof TitleScreen && mc.gui.overlay() == null) {
@@ -395,9 +396,37 @@ public final class SmokeCheck {
                 check(client.builder().inventory().getOrDefault("minecraft:bucket",0)==4 && client.builder().inventory().getOrDefault("minecraft:water_bucket",0)==0 && client.builder().inventory().getOrDefault("minecraft:lava_bucket",0)==0,"All four physical buckets remain as empty buckets; no extra water or lava buckets were supplied");
                 check(client.builder().inventory().getOrDefault("minecraft:iron_chain",0)==0,"Legacy chain was placed in survival and its item consumed");
                 capture("aurora-fluid-build.png");client.modules().get("auto_builder").setEnabled(false);
-                client.builder().stop("Smoke test complete");
-                Files.writeString(RESULT,"PASS: Native Minecraft 26.3 survival tests verified file picker, textured previews with pixel comparisons, material HUD/list, chest restock and ordinary block placement. A real legacy-chain file built iron_chain, three water sources and two lava sources. Only two water buckets seeded a contained 2x2 infinite pool; refills and regeneration were server-confirmed, the second lava bucket came from a restock chest, and all four empty buckets remained. Missing-material gate and existing UI/HUD tests passed.\n");
+                client.builder().stop("Fluid tests complete");setupRecipeFixture(mc,client);stage=50;stageTick=ticks;
+            } else if(stage==50 && fixtureReady && ticks-stageTick>15 && mc.player.blockPosition().equals(recipeBase)) {
+                var states=new java.util.HashMap<net.minecraft.core.BlockPos,net.minecraft.world.level.block.state.BlockState>();
+                var b=net.minecraft.world.level.block.Blocks.POTTED_RED_MUSHROOM;
+                states.put(new net.minecraft.core.BlockPos(0,0,2),b.defaultBlockState());
+                states.put(new net.minecraft.core.BlockPos(2,0,2),net.minecraft.world.level.block.Blocks.POTTED_OAK_SAPLING.defaultBlockState());
+                states.put(new net.minecraft.core.BlockPos(4,0,2),net.minecraft.world.level.block.Blocks.DYED_CANDLE_CAKE.pick(net.minecraft.world.item.DyeColor.BLUE).defaultBlockState().setValue(net.minecraft.world.level.block.CandleCakeBlock.LIT,true));
+                states.put(new net.minecraft.core.BlockPos(6,0,2),net.minecraft.world.level.block.Blocks.DYED_CANDLE.pick(net.minecraft.world.item.DyeColor.RED).defaultBlockState().setValue(net.minecraft.world.level.block.CandleBlock.CANDLES,4));
+                states.put(new net.minecraft.core.BlockPos(8,1,2),net.minecraft.world.level.block.Blocks.WALL_TORCH.defaultBlockState().setValue(net.minecraft.world.level.block.WallTorchBlock.FACING,net.minecraft.core.Direction.WEST));
+                states.put(new net.minecraft.core.BlockPos(0,0,4),net.minecraft.world.level.block.Blocks.SNOW.defaultBlockState().setValue(net.minecraft.world.level.block.SnowLayerBlock.LAYERS,3));
+                states.put(new net.minecraft.core.BlockPos(0,0,6),net.minecraft.world.level.block.Blocks.IRON_CHAIN.defaultBlockState().setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED,true));
+                states.put(new net.minecraft.core.BlockPos(4,0,6),net.minecraft.world.level.block.Blocks.WATER.defaultBlockState());
+                states.put(new net.minecraft.core.BlockPos(4,1,6),net.minecraft.world.level.block.Blocks.LILY_PAD.defaultBlockState());
+                var file=writeRecipeFile(states);client.builder().load(dev.aurora.minecraft.builder.DirectSchematic.read(file));
+                recipeBlocks=client.builder().document().at(recipeBase).plan().blocks();
+                check(client.builder().materials().remainingItems()==18,"Compound checklist counts pot plus plant, cake plus candle plus ignition, repeated items, wet chain and lily pad");
+                mc.gui.setScreen(new dev.aurora.minecraft.builder.MaterialListScreen(null,client));stage=51;stageTick=ticks;
+            } else if(stage==51 && ticks-stageTick>20) {
+                capture("aurora-compound-materials.png");mc.gui.setScreen(null);client.modules().get("auto_builder").setEnabled(true);stage=52;stageTick=ticks;
+            } else if(stage==52 && client.builder().state()==dev.aurora.core.builder.BuildSession.State.COMPLETE) {
+                check(recipeBlocks.stream().allMatch(client.builder()::placed),"Every compound action was server-confirmed in survival");
+                check(client.builder().document().at(recipeBase).states().entrySet().stream().allMatch(e->mc.level.getBlockState(e.getKey())==e.getValue()),"Final states exactly match both potted plants, lit candle cake, four candles, snow layers, wall torch, wet chain and lily pad");
+                check(client.builder().materials().remainingItems()==0,"Compound material list reaches zero only after placement");
+                check(client.builder().inventory().getOrDefault("minecraft:bucket",0)==1,"Waterlogging consumes water and returns its empty bucket");
+                stage=53;stageTick=ticks;
+            } else if(stage==53 && ticks-stageTick>15) {
+                capture("aurora-compound-build.png");client.modules().get("auto_builder").setEnabled(false);client.builder().stop("Smoke test complete");
+                Files.writeString(RESULT,"PASS: Native Minecraft 26.3 survival UI, HUD, real file loading, textured preview, material counts, restock, stairs, double slabs, chain alias, water refill pool and lava tests passed. Compound recipes server-confirmed potted red mushroom, potted oak sapling, lit blue candle cake, four red candles, three snow layers, wall torch, waterlogged iron chain and lily pad. All final block states match, materials reach zero, and the water bucket is returned empty.\n");
                 finished=true;AuroraClient.LOG.info("AURORA SMOKE COMPLETE: PASS");mc.stop();
+            } else if(stage==52 && (client.builder().state()==dev.aurora.core.builder.BuildSession.State.PAUSED || client.builder().state()==dev.aurora.core.builder.BuildSession.State.MISSING_MATERIALS)) {
+                throw new AssertionError("Compound builder stopped: "+client.builder().status()+"; inventory="+client.builder().inventory());
             } else if(stage==42 && (client.builder().state()==dev.aurora.core.builder.BuildSession.State.PAUSED || client.builder().state()==dev.aurora.core.builder.BuildSession.State.MISSING_MATERIALS)) {
                 throw new AssertionError("Fluid builder stopped: "+client.builder().status()+"; pool="+client.builder().water.status()+"; inventory="+client.builder().inventory());
 
@@ -408,6 +437,43 @@ public final class SmokeCheck {
             try { Files.writeString(RESULT, "FAIL: " + error + "\n"); } catch (Exception ignored) { }
             mc.stop();
         }
+    }
+
+    private static void setupRecipeFixture(Minecraft mc,AuroraClient client) {
+        recipeBase=buildBase.offset(-12,0,0);fixtureReady=false;var uuid=mc.player.getUUID();
+        mc.getSingleplayerServer().execute(()->{
+            var world=mc.getSingleplayerServer().overworld();var player=mc.getSingleplayerServer().getPlayerList().getPlayer(uuid);
+            for(int x=-2;x<=10;x++)for(int z=-2;z<=8;z++) {
+                world.setBlockAndUpdate(recipeBase.offset(x,-1,z),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+                for(int y=0;y<=4;y++)world.setBlockAndUpdate(recipeBase.offset(x,y,z),net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+            }
+            world.setBlockAndUpdate(recipeBase.offset(9,1,2),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+            for(int x:new int[]{0,4}) {
+                var center=recipeBase.offset(x,0,6);
+                for(var side:java.util.List.of(net.minecraft.core.Direction.NORTH,net.minecraft.core.Direction.SOUTH,net.minecraft.core.Direction.EAST,net.minecraft.core.Direction.WEST))world.setBlockAndUpdate(center.relative(side),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+            }
+            world.setBlockAndUpdate(recipeBase.offset(4,0,6),net.minecraft.world.level.block.Blocks.WATER.defaultBlockState());
+            player.getInventory().clearContent();
+            ItemStack[] stacks={new ItemStack(Items.FLOWER_POT,2),new ItemStack(Items.RED_MUSHROOM),new ItemStack(Items.OAK_SAPLING),new ItemStack(Items.CAKE),new ItemStack(Items.DYED_CANDLE.pick(net.minecraft.world.item.DyeColor.BLUE)),new ItemStack(Items.FIRE_CHARGE),new ItemStack(Items.DYED_CANDLE.pick(net.minecraft.world.item.DyeColor.RED),4),new ItemStack(Items.SNOW,3),new ItemStack(Items.TORCH),new ItemStack(Items.IRON_CHAIN),new ItemStack(Items.WATER_BUCKET),new ItemStack(Items.LILY_PAD)};
+            for(int i=0;i<stacks.length;i++)player.getInventory().setItem(9+i,stacks[i]);
+            player.inventoryMenu.broadcastChanges();player.teleportTo(recipeBase.getX()+0.5,recipeBase.getY(),recipeBase.getZ()+0.5);fixtureReady=true;
+        });
+    }
+    private static net.minecraft.nbt.CompoundTag nbtPos(int x,int y,int z) {var tag=new net.minecraft.nbt.CompoundTag();tag.putInt("x",x);tag.putInt("y",y);tag.putInt("z",z);return tag;}
+    private static Path writeRecipeFile(java.util.Map<net.minecraft.core.BlockPos,net.minecraft.world.level.block.state.BlockState> states) throws Exception {
+        var root=new net.minecraft.nbt.CompoundTag();root.putInt("Version",6);
+        var meta=new net.minecraft.nbt.CompoundTag();meta.putString("Name","Potted plants and compound recipes");root.put("Metadata",meta);
+        var region=new net.minecraft.nbt.CompoundTag();region.put("Position",nbtPos(0,0,0));region.put("Size",nbtPos(9,2,7));
+        var palette=new java.util.ArrayList<net.minecraft.world.level.block.state.BlockState>();palette.add(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+        for(var state:states.values())if(!palette.contains(state))palette.add(state);
+        var tags=new net.minecraft.nbt.ListTag();for(var state:palette)tags.add(net.minecraft.nbt.NbtUtils.writeBlockState(state));region.put("BlockStatePalette",tags);
+        int bits=Math.max(2,32-Integer.numberOfLeadingZeros(palette.size()-1));long[] data=new long[(126*bits+63)/64];
+        for(int y=0;y<2;y++)for(int z=0;z<7;z++)for(int x=0;x<9;x++) {
+            int id=palette.indexOf(states.getOrDefault(new net.minecraft.core.BlockPos(x,y,z),net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()));int offset=(y*63+z*9+x)*bits;
+            data[offset/64]|=(long)id<<(offset%64);if(offset%64+bits>64)data[offset/64+1]|=(long)id>>>(64-offset%64);
+        }
+        region.putLongArray("BlockStates",data);var regions=new net.minecraft.nbt.CompoundTag();regions.put("recipes",region);root.put("Regions",regions);
+        Path file=schematicFile.getParent().resolve("potted plants and compound recipes.litematic");net.minecraft.nbt.NbtIo.writeCompressed(root,file);return file;
     }
 
     private static void setupFluidFixture(Minecraft mc,AuroraClient client) {

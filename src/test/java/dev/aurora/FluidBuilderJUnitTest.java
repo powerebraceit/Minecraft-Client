@@ -46,7 +46,8 @@ class FluidBuilderJUnitTest {
     }
     @Test void flowingOnlySelectionCannotBeReportedAsAlreadyBuilt() {
         var doc=new DirectSchematic("flow only",Path.of("flow.litematic"),Map.of(BlockPos.ZERO,Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL,2)));
-        assertThrows(IllegalStateException.class,()->doc.at(BlockPos.ZERO));
+        assertTrue(doc.at(BlockPos.ZERO).plan().blocks().isEmpty());
+        assertFalse(doc.at(BlockPos.ZERO).recipes().get(BlockPos.ZERO).manualReason().isBlank());
     }
     private static SchematicPreviewJUnitTest.World basin() {
         var world=new SchematicPreviewJUnitTest.World();

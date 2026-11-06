@@ -5,7 +5,7 @@ lila accenter, fem modulkategorier och sökning över alla kategorier.
 
 ## Ladda ner och installera
 
-1. [Ladda ner aurora-client-1.6.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.6.0/releases/1.6.0/aurora-client-1.6.0.jar).
+1. [Ladda ner aurora-client-1.7.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.7.0/releases/1.7.0/aurora-client-1.7.0.jar).
 2. Installera [Fabric Loader](https://fabricmc.net/use/installer/) **0.20.1 eller senare** för **Minecraft 26.3**.
 3. Lägg JAR-filen i `mods`-mappen för den Minecraft-instans du använder.
    I en vanlig Windows-installation är det `%APPDATA%\.minecraft\mods`.
@@ -66,8 +66,8 @@ Du kan flytta panelen med chatten öppen. Högerklicka Auto Builder och välj
 **Material list...** för hela listan med ikoner och kolumnerna **Total**, **Left**,
 **Have** och **Missing**. **Have** räknar spelarens huvudinventory och hotbar. **Materials HUD**
 slår av/på den kompakta listan; **Background** ändrar dess bakgrund. När du väljer
-en ny fil visas preview och material-HUD automatiskt igen. Materiallistan är
-oberoende av byggplanen och döljs inte av block som kräver manuellt arbete.
+en ny fil visas preview och material-HUD automatiskt igen. Materiallistan och byggaren använder samma recept. Block som kräver manuellt arbete
+döljer inte övriga material.
 
 **Vatten och lava:** materiallistan visar hinkikoner. Vatten kräver högst två
 vattenhinkar; lava kräver en lavahink per återstående källblock. Flytande vätska
@@ -77,6 +77,22 @@ utanför schemat, inom 12 block. Klienten fyller två diagonala hörn och återa
 tomma hinkar först efter att servern bekräftat att vattnet återskapas. En befintlig
 motsvarande vattenpool fungerar också. Du kan välja poolens hörn i inställningarna
 med **Use water pool corner at your feet**. Läs [vätskeguiden](docs/AUTO_BUILDER.md).
+
+**Flerstegsblock:** alla registrerade krukväxter räknas som blomkruka plus rätt
+växt, exempelvis `potted_red_mushroom` → blomkruka + röd svamp. Byggaren placerar
+krukan och planterar sedan växten. Ljustårtor räknar tårta + motsvarande ljus;
+tända ljus behöver även en fire charge. Snölager, ljus, sjögurkor, sköldpaddsägg
+och segmenterade växtblock räknar varje föremål. Vattenfyllda block räknar både
+blockföremålet och vatten, med samma tvåhinksgräns och återfyllningspool.
+Delvis färdiga recept räknar bara återstående steg.
+
+Resolvern använder spelets register för alla blockföremål, inklusive väggvarianter,
+frön och redstone. Ett automatiskt registertest går igenom **1286 block och 35723
+blockstates**. Detta kontrollerar recept och material; det innebär inte att varje
+blockstate kan byggas automatiskt i survival. Portaler, tillväxt, mekaniska
+tillstånd och andra manuella moment finns kvar i previewn och hindrar inte att
+övriga material visas. Ett bygge markeras färdigt först när de slutliga
+blockstates stämmer. Se [registerrapporten](docs/placement-registry-26.3.tsv).
 
 Äldre `.litematic`-filer med blocknamnet `minecraft:chain` läses nu som
 `minecraft:iron_chain`, med riktning och vatteninställning bevarade.
@@ -88,6 +104,10 @@ med **Use water pool corner at your feet**. Läs [vätskeguiden](docs/AUTO_BUILD
 ![Hinkantal och äldre kedjefil i survival-testet](docs/minecraft-fluid-materials.png)
 
 ![Vätskebyggande under survival-testet](docs/minecraft-fluid-build.png)
+
+![Material för krukväxter och flerstegsblock](docs/minecraft-compound-materials.png)
+
+![Flerstegsblock placerade i survival](docs/minecraft-compound-build.png)
 
 ![Välj en lokal .litematic-fil i Minecraft](docs/minecraft-file-picker.png)
 
@@ -147,7 +167,7 @@ spel- och resursservrar. Gradle-versionen är låst i wrappern och verifieras me
 ```
 
 På Windows: `gradlew.bat build`. Installationsfilen skapas i
-`build/libs/aurora-client-1.6.0.jar`; filen med `-sources` är källkod.
+`build/libs/aurora-client-1.7.0.jar`; filen med `-sources` är källkod.
 
 ```bash
 ./gradlew runClient     # interaktiv utvecklingsklient

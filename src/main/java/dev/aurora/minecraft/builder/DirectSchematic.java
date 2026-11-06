@@ -8,7 +8,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.*;
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.*;
@@ -16,9 +15,10 @@ import net.minecraft.world.level.block.state.properties.*;
 /** Reads the public .litematic NBT format directly; no Litematica classes or libraries are used. */
 public record DirectSchematic(String name, Path file, Map<BlockPos,BlockState> blocks) {
     public DirectSchematic { blocks=Map.copyOf(blocks); }
-    public record Snapshot(BuildPlan plan,Map<BlockPos,BlockState> states,Map<BlockPos,List<BlockPos>> companions) {
+    public record Snapshot(BuildPlan plan,Map<BlockPos,BlockState> states,Map<BlockPos,List<BlockPos>> companions,Map<BlockPos,PlacementRecipes.Recipe> recipes) {
+        public Snapshot(BuildPlan plan,Map<BlockPos,BlockState> states,Map<BlockPos,List<BlockPos>> companions) {this(plan,states,companions,states.entrySet().stream().collect(java.util.stream.Collectors.toMap(Map.Entry::getKey,e->PlacementRecipes.describe(e.getValue()))));}
         public Snapshot {
-            states=Map.copyOf(states);
+            states=Map.copyOf(states);recipes=Map.copyOf(recipes);
             companions=companions.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey,e->List.copyOf(e.getValue())));
         }
     }
@@ -96,28 +96,23 @@ public record DirectSchematic(String name, Path file, Map<BlockPos,BlockState> b
         Map<BlockPos,BlockState> world=new HashMap<>();
         for(var e:blocks.entrySet())world.put(new BlockPos(Math.addExact(anchor.getX(),e.getKey().getX()),Math.addExact(anchor.getY(),e.getKey().getY()),Math.addExact(anchor.getZ(),e.getKey().getZ())),e.getValue());
         Map<BlockPos,List<BlockPos>> companions=new HashMap<>();List<BuildPlan.Block> plan=new ArrayList<>();
+        Map<BlockPos,PlacementRecipes.Recipe> recipes=new HashMap<>();Map<BlockState,PlacementRecipes.Recipe> cache=new IdentityHashMap<>();
         for(var e:world.entrySet()) {
             BlockPos pos=e.getKey();BlockState state=e.getValue();BlockPos parent=null;
             if((state.getBlock() instanceof DoorBlock || state.getBlock() instanceof DoublePlantBlock) && state.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF)==DoubleBlockHalf.UPPER)parent=pos.below();
             if(state.getBlock() instanceof BedBlock && state.getValue(BedBlock.PART)==BedPart.HEAD)parent=pos.relative(state.getValue(BedBlock.FACING).getOpposite());
             if(parent!=null) {
-                if(!world.containsKey(parent) || world.get(parent).getBlock()!=state.getBlock())throw new IllegalStateException("Missing lower/foot part at "+pos.toShortString());
+                if(!world.containsKey(parent) || world.get(parent).getBlock()!=state.getBlock()) {
+                    recipes.put(pos,new PlacementRecipes.Recipe(state,List.of(),"Missing lower/foot part; include the whole door, plant or bed"));continue;
+                }
                 companions.computeIfAbsent(parent,p->new ArrayList<>()).add(pos);continue;
             }
-            if(SchematicFluids.liquid(state)) {
-                if(SchematicFluids.source(state))plan.add(new BuildPlan.Block(pos.getX(),pos.getY(),pos.getZ(),SchematicFluids.item(state),1,state.toString()));
-                continue;
+            var recipe=cache.computeIfAbsent(state,PlacementRecipes::describe);recipes.put(pos,recipe);
+            for(int stage=0;stage<recipe.steps().size();stage++) {
+                var step=recipe.steps().get(stage);
+                plan.add(new BuildPlan.Block(pos.getX(),pos.getY(),pos.getZ(),step.itemId(),1,step.state().toString(),stage,step.phase()));
             }
-            var item=state.getBlock().asItem();
-            if(!(item instanceof BlockItem))throw new IllegalStateException("No supported block item for "+state);
-            int count=state.getBlock() instanceof SlabBlock && state.getValue(SlabBlock.TYPE)==SlabType.DOUBLE?2:1;
-            plan.add(new BuildPlan.Block(pos.getX(),pos.getY(),pos.getZ(),BuiltInRegistries.ITEM.getKey(item).toString(),count,state.toString()));
         }
-        for(var liquid:List.of(Blocks.WATER,Blocks.LAVA)) {
-            boolean any=world.values().stream().anyMatch(state->state.is(liquid));
-            boolean source=world.values().stream().anyMatch(state->state.is(liquid) && SchematicFluids.source(state));
-            if(any && !source)throw new IllegalStateException("Include the source blocks for flowing "+BuiltInRegistries.BLOCK.getKey(liquid));
-        }
-        return new Snapshot(new BuildPlan(plan),world,companions);
+        return new Snapshot(new BuildPlan(plan),world,companions,recipes);
     }
 }

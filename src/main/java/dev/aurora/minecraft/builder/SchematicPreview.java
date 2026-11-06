@@ -60,11 +60,11 @@ public final class SchematicPreview {
             var tints=model.tintLayers();tints.clear();
             for(var tint:mc.getBlockColors().getTintSources(expected))tints.add(0xff000000 | tint.colorInWorld(expected,mc.level,pos));
             FluidGhost fluid=null;
-            if(SchematicFluids.liquid(expected)) {
+            if(!expected.getFluidState().isEmpty()) {
                 var fluidModel=mc.getModelManager().getFluidStateModelSet().get(expected.getFluidState());
                 int tint=fluidModel.tintSource()==null?0xffffffff:fluidModel.tintSource().colorInWorld(expected,mc.level,pos);
                 var above=builder.document().blocks().get(block.pos().subtract(builder.anchor()).above());
-                float height=above!=null && above.getBlock()==expected.getBlock()?1:expected.getFluidState().getOwnHeight();
+                float height=above!=null && above.getFluidState().getType().isSame(expected.getFluidState().getType())?1:expected.getFluidState().getOwnHeight();
                 fluid=new FluidGhost(fluidModel.stillMaterial().sprite(),fluidModel.flowingMaterial().sprite(),tint,height);
             }
             int color=match(expected,mc.level.getBlockState(pos))==Match.MISSING?MISSING_COLOR:WRONG_COLOR;
@@ -83,7 +83,7 @@ public final class SchematicPreview {
             // Slight expansion keeps the intended model visible at a conflicting block's outer faces.
             pose.translate(-0.001,-0.001,-0.001);pose.scale(1.002f,1.002f,1.002f);
             if(ghost.fluid()!=null)ghost.fluid().submit(pose,output,ghost.opacityColor());
-            else ghost.model().submit(pose,specialOutput,0xf000f0,OverlayTexture.NO_OVERLAY,0);
+            ghost.model().submit(pose,specialOutput,0xf000f0,OverlayTexture.NO_OVERLAY,0);
             pose.popPose();
             pose.translate(-0.003,-0.003,-0.003);pose.scale(1.006f,1.006f,1.006f);
             output.submitShapeOutline(pose,Shapes.block(),RenderTypes.linesTranslucentNoDepthWrite(),ghost.outlineColor(),1.5f,false);

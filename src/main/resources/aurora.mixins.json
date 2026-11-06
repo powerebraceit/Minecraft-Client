@@ -17,7 +17,8 @@
     "SchematicRenderMixin",
     "GhostRenderTypeAccessor",
     "GhostRenderSetupAccessor",
-    "GhostTextureAccessor"
+    "GhostTextureAccessor",
+    "BlockItemPlacementInvoker"
   ],
   "injectors": {
     "defaultRequire": 1

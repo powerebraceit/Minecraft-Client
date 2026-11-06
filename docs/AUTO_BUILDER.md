@@ -54,7 +54,7 @@ Preview och material-HUD kan slås av/på var för sig. Ett nytt filval slår p�
 igen så att det laddade schemat och dess lista blir synliga. Sparad HUD-position
 behålls.
 
-Listan byggs direkt från den valda filen och är oberoende av byggplanens krav.
+Listan och byggplanen byggs från samma recept för den valda filens block.
 Vatten- och lavakällor visas med respektive hinkikon. Vatten visar högst två
 vattenhinkar, lava visar en hink per källblock som återstår. Flytande vätska kostar
 inte extra hinkar. Andra block utan direkt föremål visas fortfarande som manuella
@@ -96,8 +96,9 @@ per källblock. Tomma hinkar behålls. Byggaren använder ingen oändlig lavakä
 Poolen måste vara nåbar och innesluten. Om vatten avdunstar där det ska placeras,
 om poolen skadas, om servern nekar en åtgärd eller om serverns regler hindrar
 vattenkällor från att återskapas pausas bygget. Inga extra hinkar skapas av
-klienten. Vattenfyllda block med egenskapen `waterlogged` använder fortfarande den
-vanliga blockplacerarens krav; denna funktion gäller separata vätskekällor.
+klienten. Vattenfyllda block med egenskapen `waterlogged` byggs i två steg:
+först blocket, sedan vatten. De använder samma hinkbudget och återfyllningspool.
+Både blockmodellen och vattnet visas i deras genomskinliga preview.
 
 ## Material och lager
 
@@ -117,6 +118,36 @@ vanliga blockplacerarens krav; denna funktion gäller separata vätskekällor.
 - Saknade material, full inventory, konfliktblock, världsbyte, död eller en
   misslyckad placering ger stopp/paus. En ny start gör om materialkontrollen.
 
+## Flerstegsblock och registerstöd i 1.7.0
+
+- Alla registrerade krukväxter använder **blomkruka + växt**. En redan placerad
+  tom kruka kräver endast växten. Röd svamp i kruka är inget separat inventory-item.
+- Alla 17 ljustårtor använder **tårta + rätt ljus**. Tända ljus och ljustårtor
+  behöver dessutom en **fire charge**. Vattenfyllda ljus kan inte förbli tända.
+- Dubbla slabs, snölager, flera ljus, sjögurkor, sköldpaddsägg och block med
+  segmentmängd byggs med ett serverbekräftat klick per föremål.
+- Fulla kittlar använder kittel + rätt fylld hink; pudersnö använder pudersnöhink.
+  Delvis fyllda kittlar är manuella moment.
+- Väggfacklor, väggskyltar och väggskallar får rätt föremål via spelets register
+  och använder föremålets egna placeringsregler. Näckrosblad använder spelets
+  särskilda placering ovanpå vatten efter vätskefasen.
+- Föremål och mellanresultat är gemensamma för byggaren, restock och materiallistan.
+  Ett senare korrekt steg räknar tidigare steg som klara. Tas blocket bort
+  återkommer materialbehovet.
+
+Registertestet går igenom **1286 registrerade block och 35723 blockstates** utan
+okända vanilla-id:n eller receptfel. [Hela rapporten](placement-registry-26.3.tsv)
+visar default-recept och manuella undantag. Testet bekräftar materialresolvern,
+inte automatisk placering i alla möjliga omgivningar. Moddade block måste finnas
+installerade i samma spelversion; okända mod-id:n ger fortfarande ett tydligt filfel.
+
+Block utan direkt placerbart föremål får en manuell materialrad i stället för att
+hela planen nekas. Grannkopplingar, redstone och tillväxtegenskaper får uppdateras
+av spelet efter placering. Slutkontrollen kräver exakta blockstates: kvarstående
+skillnader pausas efter två sekunder och syns fortsatt i previewn. Portaler,
+pistonhuvuden, tillväxt, ofullständigt valda dörrar/växter och block entity-data
+kan kräva manuellt arbete. Byggaren skapar inga föremål eller otillåtna states.
+
 ## Filformat och begränsningar
 
 Läsaren stöder `.litematic`-formatversion **5, 6 och 7**, negativa regionstorlekar,
@@ -134,7 +165,7 @@ block inte går att nå. Placeringar kräver stöd och en blockstate som går at
 åstadkomma med vanliga placeringsklick; alla block och mekanismer stöds därför
 inte. Fel blockstate accepteras inte som ett färdigt bygge.
 
-Gränser: **262144 schemaceller**, **32 MiB komprimerad fil**, **64 MiB NBT-data**,
+Gränser: **262144 schemaceller och högst 262144 placeringsåtgärder**, **32 MiB komprimerad fil**, **64 MiB NBT-data**,
 **32 registrerade kistor** och högst **8192 sökta gångnoder**. Preview visar högst
 4096 saknade eller felplacerade block inom 48 block från kameran. Filväljaren listar högst 500
 poster per mapp; använd en fullständig sökväg för övriga filer.
@@ -167,3 +198,11 @@ multiplayer och andra modkombinationer har inte verifierats i den här miljön.
 
 Vätskornas sju enhetstester kontrollerar hinkantal, källor/flöden, byggordning,
 uppdaterade materialantal och säkra bassänger med sten eller glas.
+
+
+Recepttesterna kontrollerar alla krukväxter och ljustårtor, delvis planterade
+krukor, lagerantal, vattenfyllning, registrerade föremål för väggvarianter/frön och
+manuella block. Survival-testet läser en riktig `.litematic` och bygger röd svamp
+i kruka, ekplanta i kruka, tänd blå ljustårta, fyra röda ljus, tre snölager,
+väggfackla, vattenfylld järnkedja och näckrosblad. Det kräver serverbekräftade
+mellanresultat, exakta slutstates, noll återstående material och återlämnad tom hink.

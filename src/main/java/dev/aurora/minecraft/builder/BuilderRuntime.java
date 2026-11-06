@@ -6,13 +6,8 @@ import java.util.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
 
 public final class BuilderRuntime implements BuildSession.Driver {
     private final AuroraClient client;
@@ -38,7 +33,8 @@ public final class BuilderRuntime implements BuildSession.Driver {
     private NativePlacement.Attempt attempt;
     private BlockPos aimedTarget;
     private int aimTicks;
-    private final Set<BlockPos> secondSlabClick=new HashSet<>();
+    private double approachRange=2.7;
+    private int finalCheckTicks;
     public String schematicName() {return document==null?"Choose a .litematic file":document.name();}
     public DirectSchematic document() {return document;}
     public BlockPos anchor() {return anchor;}
@@ -106,7 +102,7 @@ public final class BuilderRuntime implements BuildSession.Driver {
         else { restock.startScan();preflight=true; }
     }
     public void stop(String reason) {
-        preflight=false;navigator.stop();restock.cancel(reason);water.cancel();buckets.cancel();bucketAim=null;awaiting.clear();confirmations.clear();secondSlabClick.clear();attempt=null;aimedTarget=null;
+        preflight=false;navigator.stop();restock.cancel(reason);water.cancel();buckets.cancel();bucketAim=null;awaiting.clear();confirmations.clear();finalCheckTicks=0;approachRange=2.7;attempt=null;aimedTarget=null;
         if(session!=null)session.pause(reason);message=reason;
     }
     public void tick() {
@@ -115,17 +111,6 @@ public final class BuilderRuntime implements BuildSession.Driver {
         chests.outlines();water.outlines();
         if(documentInWorld() && materials!=null)materials.tick(mc.level);
         if(controlsInput() && (mc.level!=level || !mc.player.isAlive())) { stop("World changed or player died; restart explicitly");return; }
-        if(snapshot!=null && controlsInput()) {
-            for(BlockPos pos:new ArrayList<>(awaiting)) {
-                var expected=snapshot.states().get(pos);var confirmed=confirmations.get(pos);
-                if(expected!=null && expected.getBlock() instanceof net.minecraft.world.level.block.SlabBlock
-                    && expected.getValue(net.minecraft.world.level.block.SlabBlock.TYPE)==net.minecraft.world.level.block.state.properties.SlabType.DOUBLE
-                    && confirmed!=null && confirmed.getBlock()==expected.getBlock() && confirmed!=expected && secondSlabClick.add(pos)) {
-                    try {var click=NativePlacement.find(pos,expected);click.aim();click.click();}
-                    catch(RuntimeException error){stop(error.getMessage());return;}
-                }
-            }
-        }
         if(water.busy())water.tick();
         if(controlsInput() && !water.failure().isEmpty()) {stop(water.failure());return;}
         if(restock.busy())restock.tick();
@@ -156,12 +141,17 @@ public final class BuilderRuntime implements BuildSession.Driver {
     @Override public String worldIdentity() { return Integer.toHexString(System.identityHashCode(Minecraft.getInstance().level)); }
     @Override public boolean placed(BuildPlan.Block block) {
         Minecraft mc=Minecraft.getInstance();BlockPos pos=new BlockPos(block.x(),block.y(),block.z());
-        if(awaiting.contains(pos)) {
-            if(confirmations.get(pos)!=snapshot.states().get(pos))return false;
-            return snapshot.companions().getOrDefault(pos,List.of()).stream().allMatch(p->confirmations.get(p)==snapshot.states().get(p));
-        }
-        return mc.level.hasChunkAt(pos) && mc.level.getBlockState(pos)==snapshot.states().get(pos)
-            && snapshot.companions().getOrDefault(pos,List.of()).stream().allMatch(p->mc.level.getBlockState(p)==snapshot.states().get(p));
+        var recipe=snapshot.recipes().get(pos);
+        BlockState actual=awaiting.contains(pos)?confirmations.get(pos):mc.level.getBlockState(pos);
+        if(actual==null || recipe==null || !mc.level.hasChunkAt(pos) || !recipe.done(block.stage(),actual))return false;
+        return snapshot.companions().getOrDefault(pos,List.of()).stream().allMatch(p->PlacementRecipes.equivalent(awaiting.contains(p)?confirmations.get(p):mc.level.getBlockState(p),snapshot.states().get(p)));
+    }
+    @Override public boolean completionReady() {
+        var mc=Minecraft.getInstance();
+        long unmatched=snapshot.states().entrySet().stream().filter(e->mc.level.getBlockState(e.getKey())!=e.getValue()).count();
+        if(unmatched==0)return true;
+        if(++finalCheckTicks>=40)throw new IllegalStateException("Automatic steps finished; "+unmatched+" blocks still need manual state/growth or support. See the preview.");
+        return false;
     }
     @Override public Map<String,Integer> inventory() { return RestockJob.inventory(); }
     @Override public BuildSession.Stock stock() {
@@ -202,18 +192,25 @@ public final class BuilderRuntime implements BuildSession.Driver {
         if(++moveTicks>1200)throw new IllegalStateException("Could not reach the next block within 60 seconds");
         BlockPos target=new BlockPos(block.x(),block.y(),block.z());
         if(!mc.level.hasChunkAt(target))throw new IllegalStateException("Target chunk is not loaded");
-        var actual=mc.level.getBlockState(target);var expected=snapshot.states().get(target);
+        var actual=mc.level.getBlockState(target);var recipe=snapshot.recipes().get(target);var step=recipe.steps().get(block.stage());var expected=step.state();
         if(SchematicFluids.source(expected) && !actual.getFluidState().isEmpty() && actual.getBlock()!=expected.getBlock())
             throw new IllegalStateException("Remove the conflicting fluid at "+target.toShortString());
-        if(!actual.canBeReplaced() && !placed(block))throw new IllegalStateException("Remove the conflicting block at "+target.toShortString());
-        if(!navigator.walkTo(target,2.7,1.5))return false;
+        if(!actual.canBeReplaced() && !placed(block) && !recipe.canContinue(block.stage(),actual))throw new IllegalStateException("Remove the conflicting block at "+target.toShortString());
+        if(!navigator.walkTo(target,approachRange,Math.min(1.5,approachRange-0.5)))return false;
         if(!buckets.select(block.item()))return false;
-        if(BuildPlan.fluid(block)) {
-            if(!target.equals(aimedTarget) || bucketAim==null) {bucketAim=BucketActions.find(target,false);aimedTarget=target;aimTicks=2;}
+        try {
+        if(step.kind()==PlacementRecipes.Kind.BUCKET) {
+            if(!target.equals(aimedTarget) || bucketAim==null) {bucketAim=BucketActions.find(target,false,expected.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED));aimedTarget=target;aimTicks=2;}
             bucketAim.aim();if(aimTicks-->0)return false;
         }else {
-            if(!target.equals(aimedTarget) || attempt==null) {attempt=NativePlacement.find(target,expected);aimedTarget=target;aimTicks=2;}
+            if(!target.equals(aimedTarget) || attempt==null) {attempt=step.kind()==PlacementRecipes.Kind.INTERACT?NativePlacement.interact(target):step.kind()==PlacementRecipes.Kind.AIR_USE?NativePlacement.airUse(target,step):NativePlacement.find(target,step);aimedTarget=target;aimTicks=2;}
             attempt.aim();if(aimTicks-->0)return false;
+        }
+        }catch(IllegalStateException error) {
+            // A reachable target can still hide its support face behind nearby blocks.
+            // Walk closer (including vanilla jumps onto low walls) before declaring it inaccessible.
+            if(approachRange<=1.5)throw error;
+            approachRange=Math.max(1.5,approachRange-0.6);navigator.stop();attempt=null;bucketAim=null;aimedTarget=null;return false;
         }
         moveTicks=0;return true;
     }
@@ -221,10 +218,10 @@ public final class BuilderRuntime implements BuildSession.Driver {
         Minecraft mc=Minecraft.getInstance();BlockPos target=new BlockPos(block.x(),block.y(),block.z());
         awaiting.add(target.immutable());confirmations.remove(target);
         for(BlockPos companion:snapshot.companions().getOrDefault(target,List.of())) {awaiting.add(companion);confirmations.remove(companion);}
-        if(BuildPlan.fluid(block)) {
+        if(snapshot.recipes().get(target).steps().get(block.stage()).kind()==PlacementRecipes.Kind.BUCKET) {
             if(bucketAim==null)throw new IllegalStateException("No validated bucket ray");bucketAim.use();bucketAim=null;
         }else {if(attempt==null)throw new IllegalStateException("No validated placement context");attempt.click();attempt=null;}
-        aimedTarget=null;
+        aimedTarget=null;approachRange=2.7;
     }
     public void drawStatus(GuiGraphicsExtractor graphics) {
         Minecraft mc=Minecraft.getInstance();

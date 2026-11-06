@@ -20,6 +20,7 @@ public final class BuildSession {
         default Restock restockFor(BuildPlan.Block next,Map<String,Integer> requirements) {return restock(requirements);}
         default boolean preparePlacement(BuildPlan.Block block) { return true; }
         void place(BuildPlan.Block block);
+        default boolean completionReady() {return true;}
     }
     private final BuildPlan plan;
     private State state = State.IDLE;
@@ -33,7 +34,7 @@ public final class BuildSession {
     public boolean start(Driver driver) {
         pending = null; pendingTicks = 0;
         var remaining = plan.remaining(driver::placed);
-        if (remaining.isEmpty()) { state = State.COMPLETE; status = "Already built"; return true; }
+        if (remaining.isEmpty()) {world=driver.worldIdentity();state=driver.completionReady()?State.COMPLETE:State.BUILDING;status=state==State.COMPLETE?"Already built":"Checking final schematic states";return true;}
         var required = BuildPlan.materials(remaining);
         Stock stock = driver.stock();
         if (!BuildPlan.missing(required, driver.inventory()).isEmpty() && !stock.inspected) {
@@ -55,9 +56,12 @@ public final class BuildSession {
             else { if (++pendingTicks >= 100) pause("Placement was not confirmed; inspect the target block"); return; }
         }
         List<BuildPlan.Block> remaining = plan.remaining(driver::placed);
-        if (remaining.isEmpty()) { state = State.COMPLETE; status = "Build complete"; return; }
+        if (remaining.isEmpty()) {
+            try {if(driver.completionReady()){state=State.COMPLETE;status="Build complete";}else {state=State.BUILDING;status="Waiting for final schematic states";}}
+            catch(RuntimeException error){pause(error.getMessage());}return;
+        }
         int layer = remaining.getFirst().y();
-        var layerBlocks = remaining.stream().filter(block -> block.y() == layer && BuildPlan.fluid(block)==BuildPlan.fluid(remaining.getFirst())).toList();
+        var layerBlocks = remaining.stream().filter(block -> block.y() == layer && block.phase()==remaining.getFirst().phase()).toList();
         BuildPlan.Block next = layerBlocks.getFirst();
         if (driver.inventory().getOrDefault(next.item(), 0) < next.count()) {
             state = State.RESTOCKING; status = "Restocking layer " + layer;

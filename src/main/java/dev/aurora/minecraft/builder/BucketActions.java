@@ -54,13 +54,19 @@ public final class BucketActions {
         public void aim() {var p=Minecraft.getInstance().player;p.setYRot(yaw);p.setXRot(pitch);}
         public void use() {aim();var mc=Minecraft.getInstance();mc.gameMode.useItem(mc.player,InteractionHand.MAIN_HAND);}
     }
-    public static Aim find(BlockPos target,boolean pickup) {
+    public static Aim find(BlockPos target,boolean pickup) {return find(target,pickup,false);}
+    public static Aim find(BlockPos target,boolean pickup,boolean waterlog) {
         var mc=Minecraft.getInstance();var player=mc.player;var stack=player.getMainHandItem();
         if(!(stack.getItem() instanceof BucketItem bucket))throw new IllegalStateException("Select a bucket first");
         if(!pickup && stack.is(Items.WATER_BUCKET) && mc.level.environmentAttributes().getValue(EnvironmentAttributes.WATER_EVAPORATES,target))
             throw new IllegalStateException("Water evaporates here; move the build and water pool to another dimension");
         List<Vec3> points=new ArrayList<>();
-        if(pickup) {
+        if(waterlog) {
+            var shape=mc.level.getBlockState(target).getShape(mc.level,target);
+            if(shape.isEmpty())throw new IllegalStateException("No waterloggable block at "+target.toShortString());
+            var bounds=shape.bounds();
+            for(double x:new double[]{0.5,0.25,0.75})for(double y:new double[]{0.5,0.9,0.1})for(double z:new double[]{0.5,0.25,0.75})points.add(new Vec3(target.getX()+bounds.minX+(bounds.maxX-bounds.minX)*x,target.getY()+bounds.minY+(bounds.maxY-bounds.minY)*y,target.getZ()+bounds.minZ+(bounds.maxZ-bounds.minZ)*z));
+        }else if(pickup) {
             if(!mc.level.getFluidState(target).isSource())throw new IllegalStateException("Water pool is not a source yet");
             for(double x:new double[]{0.5,0.25,0.75})for(double z:new double[]{0.5,0.25,0.75})points.add(new Vec3(target.getX()+x,target.getY()+0.8,target.getZ()+z));
         }else for(Direction side:List.of(Direction.DOWN,Direction.NORTH,Direction.SOUTH,Direction.WEST,Direction.EAST,Direction.UP)) {
@@ -76,9 +82,10 @@ public final class BucketActions {
             Vec3 end=player.getEyePosition().add(delta.normalize().scale(player.blockInteractionRange()));
             var hit=mc.level.clip(new ClipContext(player.getEyePosition(),end,ClipContext.Block.OUTLINE,bucket.getFluidContext(),player));
             if(hit.getType()!=HitResult.Type.BLOCK)continue;
-            BlockPos predicted=pickup?hit.getBlockPos():hit.getBlockPos().relative(hit.getDirection());
+            boolean container=mc.level.getBlockState(hit.getBlockPos()).getBlock() instanceof LiquidBlockContainer;
+            BlockPos predicted=pickup || stack.is(Items.WATER_BUCKET) && container?hit.getBlockPos():hit.getBlockPos().relative(hit.getDirection());
             if(!predicted.equals(target))continue;
-            if(!pickup && mc.level.getBlockState(hit.getBlockPos()).getBlock() instanceof LiquidBlockContainer)continue;
+            if(!pickup && container!=waterlog)continue;
             return new Aim((float)Math.toDegrees(Math.atan2(-delta.x,delta.z)),(float)-Math.toDegrees(Math.atan2(delta.y,Math.hypot(delta.x,delta.z))));
         }
         throw new IllegalStateException("No reachable bucket ray reaches "+target.toShortString());
