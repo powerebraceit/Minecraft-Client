@@ -1,66 +1,97 @@
-# Minecraft-Client — Aurora (work in progress)
+# Minecraft-Client — Aurora
 
-En Minecraft Java-klient med målversion **26.3**. Designen har en mörk palett,
-lila accentfärg, mjuka animationer och kategorierna **Combat, Movement, Render,
-World och Misc**. Sökfältet söker i alla kategorier. Menytangenten börjar på
-**höger Shift** och kan ändras i menyn; Escape avbryter en tangentändring.
+En Fabric-klient för **Minecraft Java Edition 26.3** med en mörk, animerad meny,
+lila accenter, fem modulkategorier och sökning över alla kategorier.
 
-## Aktuell status
+## Ladda ner och installera
 
-Det här är för närvarande en **versionsoberoende Java-kärna**, inte en körbar
-Minecraft-mod. Exakt versionsstöd, Fabric-integration, spelmoduler och en
-installerbar JAR återstår. Ingen kompatibilitet med Minecraft 26.3 har verifierats.
-Katalogens moduler kan inte aktiveras förrän de har en verklig spelimplementation.
+1. [Ladda ner aurora-client-1.0.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.0.0/releases/1.0.0/aurora-client-1.0.0.jar).
+2. Installera [Fabric Loader](https://fabricmc.net/use/installer/) **0.20.1 eller senare** för **Minecraft 26.3**.
+3. Lägg JAR-filen i `mods`-mappen för den Minecraft-instans du använder.
+   I en vanlig Windows-installation är det `%APPDATA%\.minecraft\mods`.
+4. Starta Fabric-profilen med **Java 25** (Minecraft 26.3:s Java-version).
+5. Öppna en värld och tryck på **höger Shift**.
 
-Implementerat:
+Det behövs **ingen separat Fabric API-JAR**. Aurora levereras i en enda mod-JAR;
+Minecraft och Fabric Loader installeras via launchern. JAR-filen ska inte startas
+med dubbelklick eller `java -jar`.
 
-- Modulregister med de fem kategorierna, global sökning och toggle-livscykel.
-- Menyrendering via ett separat Canvas-gränssnitt, hover-effekter, animerade
-  reglage och öppningsanimation, scrollning och tangentbyte.
-- Sparbara inställningar med atomisk filersättning, säker standardtangent vid
-  ogiltig konfiguration och stöd för reducerade animationer.
-- Fristående kontroller för konfiguration, sökning, modulernas livscykel och
-  menyinteraktioner.
+## Menyn
 
-Modulförslag: Attack Cooldown, Armor Status, Toggle Sprint, Toggle Sneak, Zoom,
-Coordinates, FPS Counter, Block Info, Biome Info och Chat Timestamps.
+- Klicka på **Combat, Movement, Render, World eller Misc** för att välja kategori.
+- Skriv i sökfältet för att söka efter namn, beskrivning eller kategori i hela katalogen.
+- Klicka på en modulrad för att slå på eller av modulen. Scrolla för fler resultat.
+- Klicka på **Menu key … / Change** längst ner och tryck på önskad tangent.
+  Escape avbryter tangentbytet. Tangentnamnet visas enligt spelets tangentbordslayout.
+- Höger Shift (eller din nya tangent) stänger menyn. Escape lämnar först sökfältet
+  om det har fokus, och stänger sedan menyn.
+- **Animations: On/Off** växlar mellan mjuka animationer och reducerad rörelse.
+- Menyn pausar inte världen. Tangentöppningen är aktiv när ingen annan meny är öppen.
 
-## Testa kärnan
+Moduler, menytangent och animationsval sparas i `config/aurora.properties`.
+Alla moduler är avstängda vid första starten. För att återställa en glömd
+menytangent, stäng spelet och ta bort raden `menu.key` från konfigurationsfilen.
 
-Kör `bash scripts/test-core.sh` med JDK 21+. I den här molnmiljön har samma
-kontroller körts med Eclipse ECJ 3.42 och Java 21, eftersom endast en JRE var
-förinstallerad. 30 kontroller passerade. GitHub Actions är konfigurerat att köra
-kontrollerna med ett komplett JDK; fjärrkörningen är ännu inte verifierad.
+## Moduler
 
-Med ett JDK 21 eller senare, från repots rot (Bash):
+| Kategori | Modul | Funktion |
+| --- | --- | --- |
+| Combat | Attack Cooldown | Visar hur redo nästa slag är i procent. |
+| Combat | Armor Status | Visar utrustad rustning och återstående hållbarhet. |
+| Movement | Toggle Sprint | Håller sprintinmatningen aktiv; spelets vanliga rörelsekrav gäller. |
+| Movement | Toggle Sneak | Håller smyginmatningen aktiv tills modulen stängs av. |
+| Render | Zoom | Mjuk zoom till en fjärdedel av normalt synfält. |
+| Render | Coordinates | Visar XYZ-position. |
+| Render | FPS Counter | Visar bildfrekvens. |
+| World | Block Info | Visar namn och position för blocket du tittar på. |
+| World | Biome Info | Visar aktuell biom. |
+| Misc | Chat Timestamps | Lägger till lokal klocktid på nya chattmeddelanden. |
+
+Rörelseändringarna gäller bara spelinmatningen och lämnar tangentinställningarna
+orörda. HUD och zoom kräver en laddad värld. HUD följer spelets döljning av gränssnittet.
+
+## Bilder från Minecraft 26.3
+
+![Aurora-menyn i Minecraft](docs/minecraft-menu.png)
+
+![Aktiverade HUD-moduler, zoom och tidsstämplar](docs/minecraft-hud.png)
+
+## Bygga och testa
+
+Krav: **JDK 25**, internetåtkomst till Gradle, Maven Central, Fabric och Mojangs
+spel- och resursservrar. Gradle-versionen är låst i wrappern och verifieras med SHA-256.
 
 ```bash
-mkdir -p build/classes
-javac --release 21 -d build/classes $(find src/main/java src/test/java -name '*.java')
-java -ea -cp build/classes dev.aurora.CoreTest
+./gradlew build
 ```
 
-En bild av menydesignen kan genereras utan Minecraft:
+På Windows: `gradlew.bat build`. Installationsfilen skapas i
+`build/libs/aurora-client-1.0.0.jar`; filen med `-sources` är källkod.
 
 ```bash
-java -Djava.awt.headless=true -cp build/classes dev.aurora.DesignPreview
+./gradlew runClient     # interaktiv utvecklingsklient
+./gradlew runSmoke      # automatiskt integrationstest i en separat lokal värld
 ```
 
-![Offlineförhandsvisning av menydesignen; inte en bild från Minecraft](docs/design-preview.png)
+`runSmoke` kräver en grafisk session. På Linux med mjukvarurendering kan testet köras med:
 
-## Återstående för Minecraft-versionen
+```bash
+LIBGL_ALWAYS_SOFTWARE=1 SDL_VIDEO_FORCE_EGL=1 \
+  xvfb-run -a -s '-screen 0 1280x800x24' ./gradlew runSmoke
+```
 
-1. Verifiera att exakt version 26.3 finns i Mojangs och Fabrics versionslistor.
-2. Använd den versionens Java-krav, Fabric Loader och dokumenterade rendering/input-API.
-3. Implementera Canvas med spelets renderer och anslut menyn till spelets skärmar.
-4. Registrera ändringsbar menytangent och återställ aktiverade moduler när spelet är redo.
-5. Implementera modulernas speleffekter och återställ ändrade spelinställningar när
-   moduler stängs av eller världen lämnas.
-6. Bygg och testa den färdiga modden i Minecraft; publicera JAR och installationsanvisning.
+Integrationstestet ligger i `src/smoke`, ingår inte i den distribuerade JAR-filen
+och använder en egen spelkatalog, `run/smoke`. Det kontrollerar verklig spelstart,
+världsladdning, höger Shift, sökning och musklick, tangentbyte via menyn, sparade
+inställningar, chatt, rörelse och kamerazoom samt återställning när moduler stängs av.
+Testet sparar skärmbilder och en resultatfil; Gradle misslyckas om kontrollerna inte slutförs.
 
-Klienten ska distribueras som egen mod-JAR, utan Mojangs spelkod. Fabric Loader
-installeras separat i launchern. Ytterligare bibliotek ska bäddas in när deras
-licenser och Fabric stöder det.
+Bygget kör även 32 fristående beteendekontroller via JUnit. Speltestet har körts
+lokalt på Minecraft **26.3**, Fabric Loader **0.20.1**, Java **25** och Linux med
+Mesa-mjukvarurendering. Windows, andra modpaket och inloggad multiplayer har inte
+testats i den här miljön.
+
+GitHub Actions bygger JAR-filen, kör kontrollerna och sparar byggartefakter.
 
 För molnuppgifter: använd befintlig checkout i `/workspace/Python-IDE`.
 Varje uppgift har redan en isolerad miljö; skapa inte en Git-worktree utan uttrycklig begäran.

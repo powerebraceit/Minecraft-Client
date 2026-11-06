@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build/classes
-mapfile -t sources < <(find src/main/java src/test/java -name '*.java' -print | sort)
+mapfile -t sources < <(find src/main/java/dev/aurora/core src/main/java/dev/aurora/ui src/test/java -name '*.java' ! -name '*JUnitTest.java' -print | sort)
 if command -v javac >/dev/null 2>&1; then
     javac --release 21 -d build/classes "${sources[@]}"
 elif [[ -n "${ECJ_JAR:-}" && -f "$ECJ_JAR" ]]; then

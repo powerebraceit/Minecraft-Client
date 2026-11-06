@@ -38,14 +38,14 @@ public final class CoreTest {
         try {
             Path path = dir.resolve("config/aurora.properties");
             ClientConfig config = ClientConfig.load(path);
-            check(config.menuKey() == 344, "Right Shift default");
-            config.menuKey(82); config.reducedMotion(true);
+            check(config.menuKey() == 229, "Right Shift default");
+            config.menuKey(21); config.reducedMotion(true);
             zoom.setEnabled(true); config.remember(zoom); config.save(path); config.save(path);
             ClientConfig loaded = ClientConfig.load(path);
-            check(loaded.menuKey() == 82 && loaded.reducedMotion(), "Settings round trip");
+            check(loaded.menuKey() == 21 && loaded.reducedMotion(), "Settings round trip");
             check(loaded.enabledModules().contains("zoom"), "Module settings round trip");
             Files.writeString(path, "menu.key=invalid\nmodules.enabled=zoom,../invalid\n");
-            check(ClientConfig.load(path).menuKey() == 344, "Invalid binding fallback");
+            check(ClientConfig.load(path).menuKey() == 229, "Invalid binding fallback");
             check(ClientConfig.load(path).enabledModules().size() == 1, "Ignore invalid module ids");
             AtomicInteger saves = new AtomicInteger();
             ClickGui gui = new ClickGui(registry, config, saves::incrementAndGet);
@@ -56,15 +56,16 @@ public final class CoreTest {
             check(gui.click(220, 100, 0), "Focus search");
             for (char c : "zoom".toCharArray()) gui.charTyped(c);
             check(gui.visible().size() == 1 && gui.visible().getFirst() == zoom, "Search input");
-            gui.keyPressed(259);
+            gui.keyPressed(42);
             check(gui.query().equals("zoo"), "Backspace");
-            gui.charTyped(0x1f319); gui.keyPressed(259);
+            gui.charTyped(0x1f319); gui.keyPressed(42);
             check(gui.query().equals("zoo"), "Unicode backspace");
+            check(gui.keyPressed(21), "Search consumes printable keys so a bound letter cannot close the menu");
             check(gui.click(220, 390, 0) && gui.rebinding(), "Start key binding");
-            gui.keyPressed(256);
-            check(!gui.rebinding() && config.menuKey() == 82, "Escape cancels binding");
-            gui.click(220, 390, 0); gui.keyPressed(344);
-            check(config.menuKey() == 344 && saves.get() == 1, "Binding update persisted");
+            gui.keyPressed(41);
+            check(!gui.rebinding() && config.menuKey() == 21, "Escape cancels binding");
+            gui.click(220, 390, 0); gui.keyPressed(229);
+            check(config.menuKey() == 229 && saves.get() == 1, "Binding update persisted");
             gui.click(50, 216, 0); // Render category.
             check(gui.selected() == Category.RENDER && gui.query().isEmpty(), "Category selection resets query");
             gui.click(220, 140, 0); // Zoom, which was enabled above.
@@ -72,6 +73,8 @@ public final class CoreTest {
             gui.click(50, 130, 0); // Combat category has no game bindings yet.
             gui.click(220, 140, 0);
             check(gui.status().contains("not installed"), "Unavailable module is visibly blocked");
+            gui.click(600, 50, 0);
+            check(!config.reducedMotion() && saves.get() == 3, "Animation preference toggles and persists");
             gui.scroll(-1000); gui.render(canvas, 720, 460, 0, 0, -1);
             check(canvas.clipDepth == 0, "Scroll and negative frame delta safe");
         } finally {

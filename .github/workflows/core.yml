@@ -1,5 +1,8 @@
-name: Core checks
-on: [push, pull_request]
+name: Build client
+on:
+  push:
+    branches: [main]
+  pull_request:
 permissions:
   contents: read
 jobs:
@@ -10,10 +13,29 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
-      - run: bash scripts/test-core.sh
-      - run: java -Djava.awt.headless=true -cp build/classes dev.aurora.DesignPreview
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: bash gradlew build --no-daemon
+      - run: sha256sum build/libs/aurora-client-1.0.0.jar > build/libs/aurora-client-1.0.0.jar.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: offline-design-preview
-          path: build/design-preview.png
+          name: aurora-client-minecraft-26.3
+          path: |
+            build/libs/aurora-client-1.0.0.jar
+            build/libs/aurora-client-1.0.0.jar.sha256
+      - name: Install virtual display for integration checks
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libegl1
+      - name: Check real Minecraft client
+        timeout-minutes: 8
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          SDL_VIDEO_FORCE_EGL: '1'
+        run: xvfb-run -a -s '-screen 0 1280x800x24' bash gradlew runSmoke --no-daemon
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: minecraft-smoke-evidence
+          path: |
+            run/smoke/aurora-smoke-result.txt
+            run/smoke/screenshots/aurora-menu.png
+            run/smoke/screenshots/aurora-hud.png

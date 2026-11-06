@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.IntFunction;
 
 /** Animated GUI state and hit testing, independent of changing Minecraft rendering APIs. */
 public final class ClickGui {
@@ -15,6 +16,7 @@ public final class ClickGui {
     private final ModuleRegistry registry;
     private final ClientConfig config;
     private final Runnable persist;
+    private final IntFunction<String> keyName;
     private final Map<String, Float> toggles = new HashMap<>();
     private Category selected = Category.COMBAT;
     private String query = "";
@@ -23,9 +25,14 @@ public final class ClickGui {
     private String status = "";
 
     public ClickGui(ModuleRegistry registry, ClientConfig config, Runnable persist) {
+        this(registry, config, persist, key -> key == ClientConfig.RIGHT_SHIFT ? "Right Shift" : "Key " + key);
+    }
+
+    public ClickGui(ModuleRegistry registry, ClientConfig config, Runnable persist, IntFunction<String> keyName) {
         this.registry = Objects.requireNonNull(registry);
         this.config = Objects.requireNonNull(config);
         this.persist = Objects.requireNonNull(persist);
+        this.keyName = Objects.requireNonNull(keyName);
     }
 
     public Category selected() { return selected; }
@@ -58,6 +65,8 @@ public final class ClickGui {
         float left = x + 166, bodyWidth = width - 184;
         canvas.text(query.isBlank() ? selected.label() : "Search results", left, y + 22, 18, WHITE);
         canvas.text(visible().size() + " modules", left, y + 47, 9, MUTED);
+        canvas.roundedRect(left + bodyWidth - 116, y + 19, 116, 24, 6, 0xff252b40);
+        canvas.text(config.reducedMotion() ? "Animations: Off" : "Animations: On", left + bodyWidth - 108, y + 27, 9, WHITE);
         canvas.roundedRect(left, y + 67, bodyWidth, 32, 8, searchFocused ? 0xff30364e : 0xff202638);
         canvas.text(query.isEmpty() ? "Search all modules..." : ellipsis(query, bodyWidth, 11), left + 12, y + 78, 11, query.isEmpty() ? MUTED : WHITE);
         canvas.clip(left, y + 110, bodyWidth, height - 176);
@@ -78,8 +87,8 @@ public final class ClickGui {
         if (visible.isEmpty()) canvas.text("No modules found", left + 12, y + 126, 11, MUTED);
         canvas.unclip();
         canvas.roundedRect(left, y + height - 56, bodyWidth, 26, 7, rebinding ? 0xff41355c : 0xff252b40);
-        String binding = config.menuKey() == ClientConfig.RIGHT_SHIFT ? "Right Shift" : "Key " + config.menuKey();
-        canvas.text(rebinding ? "Press a key (Esc cancels)" : "Menu key: " + binding + "  /  Change", left + 9, y + height - 47, 9, WHITE);
+        String binding = keyName.apply(config.menuKey());
+        canvas.text(ellipsis(rebinding ? "Press a key (Esc cancels)" : "Menu key: " + binding + "  /  Change", bodyWidth - 18, 9), left + 9, y + height - 47, 9, WHITE);
         canvas.text(ellipsis(status.isEmpty() ? "Esc to close  /  Scroll to browse" : status, bodyWidth, 8), left, y + height - 18, 8, MUTED);
     }
 
@@ -88,6 +97,12 @@ public final class ClickGui {
         float left = x + 166, bodyWidth = width - 184;
         searchFocused = inside(mx, my, left, y + 67, bodyWidth, 32);
         if (searchFocused) return true;
+        if (inside(mx, my, left + bodyWidth - 116, y + 19, 116, 24)) {
+            config.reducedMotion(!config.reducedMotion());
+            try { persist.run(); status = "Animation preference saved"; }
+            catch (RuntimeException e) { status = "Preference changed; settings could not be saved"; }
+            return true;
+        }
         for (Category category : Category.values()) {
             if (inside(mx, my, x + 12, y + categoryTop() + category.ordinal() * categoryStep(), 124, Math.min(34, categoryStep() - 2))) {
                 selected = category; query = ""; scroll = 0; return true;
@@ -102,9 +117,10 @@ public final class ClickGui {
                 ClientModule module = list.get(index);
                 if (!module.available()) { status = "Game integration not installed"; return true; }
                 try {
-                    module.setEnabled(!module.enabled()); config.remember(module); persist.run();
-                    status = module.name() + (module.enabled() ? " enabled" : " disabled");
-                } catch (RuntimeException e) { status = "Could not update module: " + module.name(); }
+                    module.setEnabled(!module.enabled()); config.remember(module);
+                } catch (RuntimeException e) { status = "Could not update module: " + module.name(); return true; }
+                try { persist.run(); status = module.name() + (module.enabled() ? " enabled" : " disabled"); }
+                catch (RuntimeException e) { status = "Module changed; settings could not be saved"; }
                 return true;
             }
         }
@@ -114,19 +130,19 @@ public final class ClickGui {
     /** true consumes the key; false lets the Minecraft screen handle it (including Escape). */
     public boolean keyPressed(int key) {
         if (rebinding) {
-            if (key == 256) { rebinding = false; return true; }
-            if (key < 32 || key > 348) return true;
+            if (key == ClientConfig.ESCAPE) { rebinding = false; return true; }
+            if (key < 4 || key > 511) return true;
             config.menuKey(key); rebinding = false;
             try { persist.run(); status = "Menu key updated"; }
             catch (RuntimeException e) { status = "Key changed; settings could not be saved"; }
             return true;
         }
-        if (searchFocused && key == 259) {
+        if (searchFocused && key == ClientConfig.BACKSPACE) {
             if (!query.isEmpty()) query = query.substring(0, query.offsetByCodePoints(query.length(), -1));
             scroll = 0; return true;
         }
-        if (key == 256 && searchFocused) { searchFocused = false; return true; }
-        return false;
+        if (key == ClientConfig.ESCAPE && searchFocused) { searchFocused = false; return true; }
+        return searchFocused;
     }
 
     public boolean charTyped(int codePoint) {

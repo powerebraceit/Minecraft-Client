@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "aurora-smoke",
+  "version": "1.0.0",
+  "name": "Aurora Development Smoke Checks",
+  "environment": "client",
+  "mixins": ["aurora-smoke.mixins.json"],
+  "depends": { "aurora": "*" }
+}

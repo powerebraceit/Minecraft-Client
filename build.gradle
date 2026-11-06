@@ -1,0 +1,75 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version '1.19.3'
+}
+
+version = project.mod_version
+group = 'dev.aurora'
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach { options.release = 25 }
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { expand version: project.version }
+}
+
+tasks.register('coreTest', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.aurora.CoreTest'
+    enableAssertions = true
+}
+test { useJUnitPlatform() }
+
+sourceSets {
+    smoke {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+loom {
+    mods {
+        aurora { sourceSet sourceSets.main }
+        'aurora-smoke' { sourceSet sourceSets.smoke }
+    }
+    runs {
+        smoke {
+            client()
+            source sourceSets.smoke
+            runDir 'run/smoke'
+            vmArg '-Daurora.smoke=true'
+            if (System.getenv('AURORA_TRUSTSTORE')) {
+                vmArg "-Djavax.net.ssl.trustStore=${System.getenv('AURORA_TRUSTSTORE')}"
+            }
+        }
+    }
+}
+
+tasks.named('runSmoke').configure {
+    doFirst {
+        delete 'run/smoke/aurora-smoke-result.txt', 'run/smoke/screenshots/aurora-menu.png', 'run/smoke/screenshots/aurora-hud.png'
+    }
+    doLast {
+        def result = file('run/smoke/aurora-smoke-result.txt')
+        if (!result.exists() || !result.text.startsWith('PASS:')) {
+            throw new GradleException(result.exists() ? result.text : 'Client smoke checks did not finish')
+        }
+        logger.lifecycle(result.text.trim())
+    }
+}
+
+tasks.wrapper {
+    gradleVersion = '9.8.2'
+    distributionSha256Sum = '21bd5da2de49b642904077f38c0efdc7778e92b3ed0889392dca61b97e389607'
+}

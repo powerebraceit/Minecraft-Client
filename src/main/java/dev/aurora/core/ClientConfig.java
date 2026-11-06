@@ -11,16 +11,18 @@ import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
 
-/** No game dependency; the adapter supplies GLFW key codes. */
+/** SDL keyboard scancodes, matching Minecraft 26.3's InputConstants. */
 public final class ClientConfig {
-    public static final int RIGHT_SHIFT = 344;
+    public static final int RIGHT_SHIFT = 229;
+    public static final int ESCAPE = 41;
+    public static final int BACKSPACE = 42;
     private int menuKey = RIGHT_SHIFT;
     private boolean reducedMotion;
     private final Set<String> enabled = new HashSet<>();
 
     public int menuKey() { return menuKey; }
     public void menuKey(int key) {
-        if (key < 32 || key > 348) throw new IllegalArgumentException("Unsupported menu key");
+        if (key < 4 || key > 511 || key == ESCAPE) throw new IllegalArgumentException("Unsupported menu key");
         menuKey = key;
     }
     public boolean reducedMotion() { return reducedMotion; }
@@ -35,7 +37,7 @@ public final class ClientConfig {
         if (!Files.exists(file)) return config;
         Properties p = new Properties();
         try (Reader reader = Files.newBufferedReader(file)) { p.load(reader); }
-        try { config.menuKey(Integer.parseInt(p.getProperty("menu.key", "344"))); }
+        try { config.menuKey(Integer.parseInt(p.getProperty("menu.key", Integer.toString(RIGHT_SHIFT)))); }
         catch (IllegalArgumentException ignored) { /* A bad binding must not lock the user out. */ }
         config.reducedMotion(Boolean.parseBoolean(p.getProperty("ui.reducedMotion", "false")));
         for (String id : p.getProperty("modules.enabled", "").split(",")) {
