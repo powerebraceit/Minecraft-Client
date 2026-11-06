@@ -11,8 +11,9 @@ schemat till någon tjänst.
    `schematics`-mapp eller senast använda mapp. Klicka på en mapp för att öppna den
    och på en `.litematic`-fil för att välja den. Sökvägsfältet och **Go** kan öppna
    en annan mapp eller fil. **Up** går upp en mapp; **Home** öppnar din hemmapp.
-3. Aktivera **Preview** om den är avstängd. Schemat visas med blå, genomskinliga
-   blockformer. **G**, eller **Move schematic corner to your feet**, flyttar
+3. Aktivera **Preview** om den är avstängd. Schemat visas med genomskinliga, texturerade
+   blockmodeller. Röda ramar betyder saknat block, gula ramar betyder fel block
+   eller fel blockstate. Ett rätt placerat block döljs, och visas igen om det tas bort. **G**, eller **Move schematic corner to your feet**, flyttar
    schemats gemensamma lägsta hörn till blockpositionen vid dina fötter.
 4. Titta på en kista och tryck **V** för att registrera den som restock-kista.
    Samma tangent på samma kista tar bort den. Dubbelkistans två halvor räknas som
@@ -26,6 +27,31 @@ När filen valts försöker bygget starta. **Back** eller Escape avbryter starte
 Använd det manuella filvalet i inställningarna om du vill granska previewn först.
 G- och V-tangenterna kan ändras. Egna modul-hotkeys har företräde vid en konflikt.
 Byggen återupptas inte automatiskt efter en ny spelstart; välj filen igen.
+
+## Materiallista och HUD
+
+**Material list...** i Auto Builder-inställningarna visar alla material med
+föremålsikoner. Scrolla för att se resten av en lång lista.
+
+| Kolumn | Betydelse |
+| --- | --- |
+| Total | Föremål för hela schemat. |
+| Left | Föremål som återstår för block som inte är rätt placerade. |
+| Have | Föremål i spelarens inventory, inklusive hotbar. |
+| Missing | `max(0, Left − Have)`. Kistornas innehåll ingår inte i denna kolumn. |
+
+En kompakt material-HUD visar upp till sex återstående material och deras
+**Left / Have**. Hela listan finns alltid i inställningarna. Panelen visas även
+när du bara granskar schemat med byggmodulen avstängd. Dra den med **T**-chatten
+öppen, precis som övriga HUD-paneler. Auto Builder-inställningarna har
+**Materials HUD**, **Background**, textskugga, accent och återställning av position.
+Preview och material-HUD kan slås av/på var för sig.
+
+Listan följer placeringar och borttagningar i världen. För stora scheman sprids
+kontrollen över flera ticks; serverns enskilda blockuppdateringar uppdaterar den
+berörda posten direkt. En befintlig enkel slab minskar materialbehovet för en
+dubbel slab till ett föremål. Överdelar av dörrar och sängars huvud räknas inte
+som egna extra föremål.
 
 ## Material och lager
 
@@ -63,7 +89,7 @@ inte. Fel blockstate accepteras inte som ett färdigt bygge.
 
 Gränser: **262144 schemaceller**, **32 MiB komprimerad fil**, **64 MiB NBT-data**,
 **32 registrerade kistor** och högst **8192 sökta gångnoder**. Preview visar högst
-4096 saknade block inom 48 block från spelaren. Filväljaren listar högst 500
+4096 saknade eller felplacerade block inom 48 block från kameran. Filväljaren listar högst 500
 poster per mapp; använd en fullständig sökväg för övriga filer.
 
 ## Verifiering
@@ -71,7 +97,10 @@ poster per mapp; använd en fullständig sökväg för övriga filer.
 `./gradlew build runSmoke` kör enhetstester och ett verkligt Minecraft 26.3-speltest
 i en separat lokal värld. Speltestet väljer en skapad `.litematic`-fil genom
 filväljaren utan Litematica/MaLiLib, provar automatisk filväljare och avbrytning,
-G-ankring och preview. Det bygger sedan sten, en riktad trappa och en dubbel slab
+G-ankring och texturerad preview. Röda/gula ramar, döljning av rätt placerade
+block och återvisning efter borttagning verifieras tillsammans med materialantal
+och material-HUD som kan flyttas i chatten. Kistans genomskinliga specialmodell
+kontrolleras genom att verifiera faktisk geometriinlämning till renderaren. Det bygger sedan sten, en riktad trappa och en dubbel slab
 i två lager i survival. Kistbindning, sparad färg, dubbelkisteidentitet, fysisk
 gång, serverns inventory, faktisk restock, materialkonsumtion och spärren vid
 saknade material verifieras också.
@@ -79,5 +108,7 @@ saknade material verifieras också.
 Läsarens sex enhetstester täcker bland annat negativa dimensioner, packade bitar
 över long-gränser, flera regioner, felaktiga filer, klassisk blockpalett och
 materialantal för dörrar/dubbla slabs. Dörrar och sängar har inte speltestats.
+Fyra ytterligare enhetstester täcker färgklassificering, materialändring vid
+placering/borttagning, delvis placerade dubbla slabs och dörröverdelar.
 Testerna har körts på Linux med Java 25 och Fabric Loader 0.20.1. Windows, inloggad
 multiplayer och andra modkombinationer har inte verifierats i den här miljön.

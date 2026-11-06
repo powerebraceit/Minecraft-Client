@@ -32,7 +32,8 @@ import net.minecraft.world.item.Items;
 
 /** Development-only integration runner. Never included in the distributed client JAR. */
 public final class SmokeCheck {
-    private static int stage, ticks, stageTick;
+    private static int stage, ticks, stageTick, specialModelsBefore;
+    public static final java.util.concurrent.atomic.AtomicInteger SPECIAL_MODELS=new java.util.concurrent.atomic.AtomicInteger();
     private static boolean finished;
     private static int originalGuiScale;
     private static volatile boolean fixtureReady;
@@ -40,6 +41,7 @@ public final class SmokeCheck {
     private static net.minecraft.world.phys.Vec3 builderStart;
     private static java.util.List<dev.aurora.core.builder.BuildPlan.Block> fixtureBlocks;
     private static Path schematicFile;
+    private static net.minecraft.core.BlockPos previewAnchor;
     private static dev.aurora.minecraft.builder.SchematicFileScreen fileScreen;
     private static final Path RESULT = Path.of("aurora-smoke-result.txt");
 
@@ -261,10 +263,64 @@ public final class SmokeCheck {
                 check(client.builder().anchor().equals(mc.player.blockPosition()), "G anchors the schematic corner at the player's feet");
                 stage=22;stageTick=ticks;
             } else if(stage==22 && ticks-stageTick>20) {
-                check(mc.getPerTickGizmos().size()>=4, "Standalone 3D schematic preview is rendered");
-                capture("aurora-schematic-preview.png");
+                var ghosts=client.builder().preview.ghosts();
+                check(ghosts.size()==4 && ghosts.stream().allMatch(g->!g.model().isEmpty()), "Preview extracts the actual textured stone, stair and slab models");
+                check(ghosts.stream().allMatch(g->g.outlineColor()==dev.aurora.minecraft.builder.SchematicPreview.MISSING_COLOR), "Unplaced blocks have red outlines");
                 fixtureBlocks=client.builder().document().at(client.builder().anchor()).plan().blocks();
-                check(dev.aurora.core.builder.BuildPlan.materials(fixtureBlocks).equals(java.util.Map.of("minecraft:stone",2,"minecraft:oak_stairs",1,"minecraft:stone_slab",2)), "File material list counts a double slab as two items");
+                check(client.builder().materials().remainingItems()==5, "Live material list counts a double slab as two items");
+                previewAnchor=client.builder().anchor();
+                mc.getSingleplayerServer().execute(()->{
+                    var world=mc.getSingleplayerServer().overworld();
+                    world.setBlockAndUpdate(previewAnchor,net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState());
+                    world.setBlockAndUpdate(previewAnchor.offset(1,0,0),net.minecraft.world.level.block.Blocks.OAK_STAIRS.defaultBlockState().setValue(net.minecraft.world.level.block.StairBlock.FACING,net.minecraft.core.Direction.NORTH));
+                    world.setBlockAndUpdate(previewAnchor.offset(2,0,0),net.minecraft.world.level.block.Blocks.STONE_SLAB.defaultBlockState().setValue(net.minecraft.world.level.block.SlabBlock.TYPE,net.minecraft.world.level.block.state.properties.SlabType.DOUBLE));
+                });
+                stage=23;stageTick=ticks;
+            } else if(stage==23 && ticks-stageTick>20) {
+                var ghosts=client.builder().preview.ghosts();
+                check(ghosts.size()==3 && ghosts.stream().filter(g->g.outlineColor()==dev.aurora.minecraft.builder.SchematicPreview.WRONG_COLOR).count()==2,
+                    "Wrong block and wrong stair orientation are yellow; correctly placed slab is hidden");
+                check(client.builder().materials().remainingItems()==3, "Material list subtracts correctly placed blocks");
+                mc.getSingleplayerServer().execute(()->mc.getSingleplayerServer().overworld().setBlockAndUpdate(previewAnchor,net.minecraft.world.level.block.Blocks.STONE.defaultBlockState()));
+                stage=24;stageTick=ticks;
+            } else if(stage==24 && ticks-stageTick>15) {
+                check(client.builder().preview.ghosts().stream().noneMatch(g->g.pos().equals(previewAnchor)), "Correct placement removes that block's ghost and outline");
+                check(client.builder().materials().remainingItems()==2, "Correct placement reduces required materials immediately");
+                mc.getSingleplayerServer().execute(()->mc.getSingleplayerServer().overworld().destroyBlock(previewAnchor,false));
+                stage=25;stageTick=ticks;
+            } else if(stage==25 && ticks-stageTick>15) {
+                check(client.builder().preview.ghosts().stream().anyMatch(g->g.pos().equals(previewAnchor) && g.outlineColor()==dev.aurora.minecraft.builder.SchematicPreview.MISSING_COLOR),
+                    "Removing a correct block restores its red textured preview");
+                check(client.builder().materials().remainingItems()==3, "Removing a placed block increases the required material count");
+                check(AuroraHud.panels().containsKey("auto_builder"), "Materials HUD appears while previewing, with the builder disabled");
+                mc.options.keyDown.setDown(true);
+                stage=26;stageTick=ticks;
+            } else if(stage==26 && ticks-stageTick>20) {
+                mc.options.keyDown.setDown(false);
+                dev.aurora.minecraft.builder.RestockJob.lookAt(net.minecraft.world.phys.Vec3.atCenterOf(previewAnchor.above()));
+                stage=260;stageTick=ticks;
+            } else if(stage==260 && ticks-stageTick>10) {
+                capture("aurora-schematic-preview.png");
+                mc.keyboardHandler.keyPress(mc.getWindow().handle(),1,new KeyEvent(InputConstants.KEY_T,0,0));
+                stage=27;stageTick=ticks;
+            } else if(stage==27 && ticks-stageTick>10) {
+                var panel=AuroraHud.panels().get("auto_builder");var chat=(ChatScreen)mc.gui.screen();
+                check(chat.mouseClicked(mouse(panel.x()+5,panel.y()+5),false), "Materials HUD can be dragged in chat before starting construction");
+                chat.mouseDragged(mouse(25,90),0,0);chat.mouseReleased(mouse(25,90));chat.onClose();
+                client.config().resetHudPosition("auto_builder");
+                mc.gui.setScreen(new dev.aurora.minecraft.builder.MaterialListScreen(new AuroraScreen(client),client));
+                stage=28;stageTick=ticks;
+            } else if(stage==28 && ticks-stageTick>15) {
+                check(mc.gui.screen() instanceof dev.aurora.minecraft.builder.MaterialListScreen, "Full material list renders with item icons and total/left/have/missing columns");
+                capture("aurora-material-list.png");mc.gui.setScreen(null);mc.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+                mc.getSingleplayerServer().execute(()->{
+                    var world=mc.getSingleplayerServer().overworld();
+                    world.setBlockAndUpdate(previewAnchor.offset(1,0,0),net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+                    world.setBlockAndUpdate(previewAnchor.offset(2,0,0),net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+                });
+                stage=29;stageTick=ticks;
+            } else if(stage==29 && ticks-stageTick>15) {
+                check(client.builder().materials().remainingItems()==5, "Restored empty build site restores all five required items");
                 client.modules().get("auto_builder").setEnabled(true);
                 stage=10;stageTick=ticks;
             } else if (stage == 10 && client.builder().state() == dev.aurora.core.builder.BuildSession.State.COMPLETE) {
@@ -273,15 +329,23 @@ public final class SmokeCheck {
                 check(client.builder().inventory().getOrDefault("minecraft:oak_stairs",0)==0 && client.builder().inventory().getOrDefault("minecraft:stone_slab",0)==0, "Native placement consumes stair and both slab items");
                 capture("aurora-build.png");
                 client.modules().get("auto_builder").setEnabled(false);
+                specialModelsBefore=SPECIAL_MODELS.get();
+                client.builder().load(new dev.aurora.minecraft.builder.DirectSchematic("Chest model preview",schematicFile,java.util.Map.of(
+                    new net.minecraft.core.BlockPos(0,0,3),net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState())));
+                dev.aurora.minecraft.builder.RestockJob.lookAt(net.minecraft.world.phys.Vec3.atCenterOf(client.builder().anchor().offset(0,0,3)));
+                stage=30;stageTick=ticks;
+            } else if (stage == 10 && client.builder().state() == dev.aurora.core.builder.BuildSession.State.PAUSED) {
+                throw new AssertionError("Builder paused: " + client.builder().status() + "; inventory=" + client.builder().inventory() + "; restock=" + client.builder().restock.status());
+            } else if(stage==30 && ticks-stageTick>15) {
+                check(SPECIAL_MODELS.get()>specialModelsBefore, "Native chest model geometry was submitted with translucency");
+                capture("aurora-special-preview.png");
                 fixtureBlocks = java.util.stream.IntStream.range(0, 7).mapToObj(i -> buildBlock(12+i,0)).toList();
                 client.builder().startSnapshot(fixtureSnapshot(fixtureBlocks));
                 stage = 11; stageTick = ticks;
-            } else if (stage == 10 && client.builder().state() == dev.aurora.core.builder.BuildSession.State.PAUSED) {
-                throw new AssertionError("Builder paused: " + client.builder().status() + "; inventory=" + client.builder().inventory() + "; restock=" + client.builder().restock.status());
             } else if (stage == 11 && client.builder().state() == dev.aurora.core.builder.BuildSession.State.MISSING_MATERIALS) {
                 check(fixtureBlocks.stream().noneMatch(client.builder()::placed), "Insufficient total materials prevent any new placement");
                 client.builder().stop("Smoke test complete");
-                Files.writeString(RESULT, "PASS: Standalone .litematic file selected in the local file picker, decoded and anchored with G, previewed and built in survival without Litematica/MaLiLib. Restock, server-confirmed layers, oriented stairs, double slabs, inventory consumption and missing-material gate passed. UI/HUD/settings regressions passed.\n");
+                Files.writeString(RESULT, "PASS: Standalone .litematic file selected in the local file picker, decoded and anchored with G, previewed with textured translucent models, red/yellow/correct/mined state transitions and live material HUD/list, and built in survival without Litematica/MaLiLib. Restock, server-confirmed layers, oriented stairs, double slabs, inventory consumption and missing-material gate passed. UI/HUD/settings regressions passed.\n");
                 finished = true;
                 AuroraClient.LOG.info("AURORA SMOKE COMPLETE: PASS");
                 mc.stop();

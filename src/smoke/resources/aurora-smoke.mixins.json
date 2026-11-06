@@ -2,6 +2,13 @@
   "required": true,
   "package": "dev.aurora.smoke.mixin",
   "compatibilityLevel": "JAVA_25",
-  "client": ["SmokeMixin", "ChatAccessor", "ChatInputAccessor"],
-  "injectors": { "defaultRequire": 1 }
+  "client": [
+    "SmokeMixin",
+    "ChatAccessor",
+    "ChatInputAccessor",
+    "GhostSubmitCheckMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

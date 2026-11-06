@@ -16,6 +16,18 @@ import net.minecraft.world.phys.Vec3;
 
 public final class BuilderRuntime implements BuildSession.Driver {
     private final AuroraClient client;
+    public final SchematicPreview preview=new SchematicPreview(this);
+    private SchematicMaterials materials;
+    private String materialsError="Choose a .litematic file first";
+    public SchematicMaterials materials() {return materials;}
+    public String materialsError() {return materialsError;}
+    public boolean documentInWorld() {return document!=null && documentWorld==Minecraft.getInstance().level;}
+    public boolean previewVisible() {return documentInWorld() && client.config().flag("auto_builder","preview",true);}
+    private void refreshSchematic() {
+        preview.reset(document,anchor);
+        try {materials=new SchematicMaterials(document.at(anchor));materials.tick(Minecraft.getInstance().level);materialsError="";}
+        catch(RuntimeException error) {materials=null;materialsError=error.getMessage();}
+    }
     private DirectSchematic document;
     private BlockPos anchor;
     private Object documentWorld;
@@ -31,12 +43,12 @@ public final class BuilderRuntime implements BuildSession.Driver {
         if(mc.player==null)throw new IllegalStateException("Join a world before selecting a schematic");
         stop("Schematic loaded");document=selected;anchor=mc.player.blockPosition().immutable();documentWorld=mc.level;session=null;
         client.config().setting("auto_builder","last_file",selected.file().toString());client.save();
-        message="Loaded "+selected.name();
+        refreshSchematic();message="Loaded "+selected.name();
     }
     public void cornerAtFeet() {
         if(document==null)throw new IllegalStateException("Choose a .litematic file first");
         Minecraft mc=Minecraft.getInstance();if(mc.player==null)throw new IllegalStateException("Join a world first");
-        stop("Corner moved to feet");anchor=mc.player.blockPosition().immutable();documentWorld=mc.level;
+        stop("Corner moved to feet");anchor=mc.player.blockPosition().immutable();documentWorld=mc.level;refreshSchematic();
     }
     public final WalkNavigator navigator=new WalkNavigator();
     public final RestockChests chests;
@@ -48,7 +60,10 @@ public final class BuilderRuntime implements BuildSession.Driver {
     private String message="Choose a .litematic file";
     private final Map<BlockPos,BlockState> confirmations=new HashMap<>();
     private final Set<BlockPos> awaiting=new HashSet<>();
-    public void confirmed(BlockPos pos,BlockState state) { if(awaiting.contains(pos))confirmations.put(pos.immutable(),state); }
+    public void confirmed(BlockPos pos,BlockState state) {
+        if(awaiting.contains(pos))confirmations.put(pos.immutable(),state);
+        if(documentInWorld() && materials!=null)materials.changed(pos,Minecraft.getInstance().level);
+    }
     public void inspectChests() { stop("Inspecting chests");level=Minecraft.getInstance().level;restock.startScan(); }
     private int waitingRevision=-1,swapTicks,moveTicks;
     public BuilderRuntime(AuroraClient client) { this.client=client;chests=new RestockChests(client);restock=new RestockJob(chests,navigator); }
@@ -86,7 +101,7 @@ public final class BuilderRuntime implements BuildSession.Driver {
         Minecraft mc=Minecraft.getInstance();
         if(mc.player==null || mc.level==null)return;
         chests.outlines();
-        preview();
+        if(documentInWorld() && materials!=null)materials.tick(mc.level);
         if(controlsInput() && (mc.level!=level || !mc.player.isAlive())) { stop("World changed or player died; restart explicitly");return; }
         if(snapshot!=null && controlsInput()) {
             for(BlockPos pos:new ArrayList<>(awaiting)) {
@@ -182,21 +197,6 @@ public final class BuilderRuntime implements BuildSession.Driver {
         for(BlockPos companion:snapshot.companions().getOrDefault(target,List.of())) {awaiting.add(companion);confirmations.remove(companion);}
         if(attempt==null)throw new IllegalStateException("No validated placement context");
         attempt.click();attempt=null;aimedTarget=null;
-    }
-    private void preview() {
-        Minecraft mc=Minecraft.getInstance();
-        if(document==null || anchor==null || mc.level!=documentWorld || !client.config().flag("auto_builder","preview",true))return;
-        try(var ignored=mc.collectPerTickGizmos()) {
-            int drawn=0;
-            for(var block:document.blocks().entrySet()) {
-                BlockPos p=anchor.offset(block.getKey());
-                if(mc.player.distanceToSqr(Vec3.atCenterOf(p))>48*48 || mc.level.getBlockState(p)==block.getValue())continue;
-                if(drawn++>=4096)break;
-                var shapes=block.getValue().getShape(mc.level,p).toAabbs();
-                if(shapes.isEmpty())shapes=List.of(new net.minecraft.world.phys.AABB(0,0,0,1,1,1));
-                for(var shape:shapes)net.minecraft.gizmos.Gizmos.cuboid(shape.move(p),net.minecraft.gizmos.GizmoStyle.strokeAndFill(0xff77caff,1,0x285588ff));
-            }
-        }
     }
     public void drawStatus(GuiGraphicsExtractor graphics) {
         Minecraft mc=Minecraft.getInstance();

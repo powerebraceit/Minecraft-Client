@@ -51,6 +51,31 @@ public final class AuroraHud {
             y += 24;
         }
         if (client.enabled("armor_status")) renderArmor(graphics, editing);
+        renderMaterials(graphics,editing);
+    }
+
+    private static void renderMaterials(GuiGraphicsExtractor graphics,boolean editing) {
+        var client=AuroraClient.instance();var builder=client.builder();var mc=Minecraft.getInstance();
+        if(!builder.documentInWorld() || builder.materials()==null || !client.config().flag("auto_builder","materials_hud",true))return;
+        var all=builder.materials().rows().stream().filter(r->r.remaining()>0).toList();
+        int count=Math.min(6,all.size()),width=Math.min(210,graphics.guiWidth()-16);
+        int height=40+count*20+(all.size()>count?14:0);
+        Bounds bounds=place("auto_builder",width,height,graphics,graphics.guiWidth()-width-8,28);
+        background(graphics,"auto_builder",bounds,editing);
+        boolean shadow=client.config().flag("auto_builder","text_shadow",false);
+        graphics.text(mc.font,"Materials left: "+builder.materials().remainingItems(),bounds.x()+8,bounds.y()+8,0xffc4baff,shadow);
+        graphics.text(mc.font,"Item: left / have in inventory",bounds.x()+8,bounds.y()+22,0xff8a93ad,shadow);
+        var inventory=builder.inventory();
+        for(int i=0;i<count;i++) {
+            var row=all.get(i);int y=bounds.y()+37+i*20;
+            var stack=dev.aurora.minecraft.builder.MaterialListScreen.stack(row.item());
+            graphics.item(stack,bounds.x()+7,y-2);
+            String amount=row.remaining()+" / "+inventory.getOrDefault(row.item(),0);
+            int amountWidth=mc.font.width(amount);
+            graphics.text(mc.font,mc.font.plainSubstrByWidth(stack.getHoverName().getString(),Math.max(10,width-40-amountWidth)),bounds.x()+27,y+2,0xffedf1ff,shadow);
+            graphics.text(mc.font,amount,bounds.x()+width-8-amountWidth,y+2,0xffffce7a,shadow);
+        }
+        if(all.size()>count)graphics.text(mc.font,"+"+(all.size()-count)+" types in Material list",bounds.x()+8,bounds.y()+height-12,0xff8a93ad,shadow);
     }
 
     private static void renderArmor(GuiGraphicsExtractor graphics, boolean editing) {
@@ -116,7 +141,7 @@ public final class AuroraHud {
         if (!(mc.gui.screen() instanceof ChatScreen) || client == null || mc.player == null || mc.gui.hud.isHidden()
                 || mouseY >= mc.getWindow().getGuiScaledHeight() - 24) return false;
         for (var panel : new ArrayList<>(PANELS.entrySet()).reversed()) {
-            if (client.enabled(panel.getKey()) && panel.getValue().contains(mouseX, mouseY)) {
+            if ((client.enabled(panel.getKey()) || panel.getKey().equals("auto_builder")) && panel.getValue().contains(mouseX, mouseY)) {
                 dragging = panel.getKey();
                 offsetX = mouseX - panel.getValue().x(); offsetY = mouseY - panel.getValue().y();
                 moved = false;

@@ -15,7 +15,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 public final class ModuleSettingsScreen extends Screen {
-    public static final Set<String> HUD_MODULES = Set.of("fps_counter", "coordinates", "biome_info", "block_info", "attack_cooldown", "armor_status");
+    public static final Set<String> HUD_MODULES = Set.of("fps_counter", "coordinates", "biome_info", "block_info", "attack_cooldown", "armor_status", "auto_builder");
     public static final int[] COLORS = {0xff9b8aff, 0xff77caff, 0xff8cdea4, 0xffffce7a, 0xffff7f8c, 0xffff96d1, 0xffffffff};
     private final Screen parent;
     private final AuroraClient client;
@@ -56,6 +56,8 @@ public final class ModuleSettingsScreen extends Screen {
             var builder = client.builder();
             row(() -> "Choose .litematic file...", () -> minecraft.gui.setScreen(new dev.aurora.minecraft.builder.SchematicFileScreen(this,client)));
             row(() -> "Schematic: " + builder.schematicName(), () -> { });
+            row(() -> "Material list...", () -> minecraft.gui.setScreen(new dev.aurora.minecraft.builder.MaterialListScreen(this,client)));
+            flag("Materials HUD", "materials_hud", true);
             row(() -> "Status: " + builder.status(), () -> { });
             row(() -> "Start / stop build", () -> {
                 if (!module.available()) throw new IllegalStateException(module.unavailableReason());

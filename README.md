@@ -5,7 +5,7 @@ lila accenter, fem modulkategorier och sökning över alla kategorier.
 
 ## Ladda ner och installera
 
-1. [Ladda ner aurora-client-1.4.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.4.0/releases/1.4.0/aurora-client-1.4.0.jar).
+1. [Ladda ner aurora-client-1.5.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.5.0/releases/1.5.0/aurora-client-1.5.0.jar).
 2. Installera [Fabric Loader](https://fabricmc.net/use/installer/) **0.20.1 eller senare** för **Minecraft 26.3**.
 3. Lägg JAR-filen i `mods`-mappen för den Minecraft-instans du använder.
    I en vanlig Windows-installation är det `%APPDATA%\.minecraft\mods`.
@@ -44,7 +44,11 @@ Litematica eller MaLiLib. Öppna World och högerklicka på **Auto Builder**, v�
 sökvägsfält samt Go, Up och Home. När du aktiverar modulen utan att ha valt en fil
 öppnas filväljaren automatiskt; Back eller Escape avbryter starten.
 
-En blå förhandsvisning visar schemat i världen. **G** flyttar schemats lägsta hörn
+Förhandsvisningen visar schemats **riktiga blockmodeller och texturer med cirka
+53 % opacitet**. Röda ramar visar saknade block; gula ramar visar fel block eller
+fel blockstate, till exempel en felvänd trappa. Rätt placerade block döljs ur
+previewn. Gräver du bort ett sådant block visas dess röda preview igen.
+**G** flyttar schemats lägsta hörn
 till dina fötter. **V** registrerar kistan du tittar på som restock-kista. Båda
 tangenterna och kistmarkeringens färg kan ändras i modulens inställningar.
 Starta bygget först när previewn står rätt. Bygget kräver allt återstående
@@ -54,6 +58,16 @@ Filval, preview, G-ankring, materialkontroll, gång till kista, materialhämtnin
 serverbekräftat lagerbygge har testats i Minecraft 26.3 survival **utan externa
 schematic-moddar**, med en riktig testfil som innehåller sten, en riktad trappa
 och en dubbel slab. Se [användning och begränsningar](docs/AUTO_BUILDER.md).
+
+Material-HUD:en visar återstående antal per material och vad du har i inventory.
+Du kan flytta panelen med chatten öppen. Högerklicka Auto Builder och välj
+**Material list...** för hela listan med ikoner och kolumnerna **Total**, **Left**,
+**Have** och **Missing**. **Have** räknar spelarens inventory. **Materials HUD**
+slår av/på den kompakta listan; **Background** ändrar dess bakgrund.
+
+![Texturerade block med röda/gula ramar och materiallista](docs/minecraft-schematic-preview.png)
+
+![Fullständig materiallista](docs/minecraft-material-list.png)
 
 ![Välj en lokal .litematic-fil i Minecraft](docs/minecraft-file-picker.png)
 
@@ -113,7 +127,7 @@ spel- och resursservrar. Gradle-versionen är låst i wrappern och verifieras me
 ```
 
 På Windows: `gradlew.bat build`. Installationsfilen skapas i
-`build/libs/aurora-client-1.4.0.jar`; filen med `-sources` är källkod.
+`build/libs/aurora-client-1.5.0.jar`; filen med `-sources` är källkod.
 
 ```bash
 ./gradlew runClient     # interaktiv utvecklingsklient
@@ -136,8 +150,10 @@ sparade HUD-positioner, vanlig chattinmatning och ändrad GUI-skala.
 Testet sparar skärmbilder och en resultatfil; Gradle misslyckas om kontrollerna inte slutförs.
 
 Bygget kör även 34 grundkontroller, sex tester för HUD-positioner, två tester för modulinställningar,
-sju tester för byggplanering, tre tester för gångvägar och sex tester för `.litematic`-läsaren via JUnit.
-Speltestet verifierar dessutom filval, avbruten filväljare, preview, G-ankring,
+sju tester för byggplanering, tre tester för gångvägar, sex tester för `.litematic`-läsaren och fyra tester för preview/materialantal via JUnit.
+Speltestet verifierar dessutom filval, avbruten filväljare, texturerad preview,
+röda/gula ramar, döljning av rätt placerade block, återvisning efter borttagning,
+materiallistor, flyttning av material-HUD och G-ankring,
 restock och ett faktiskt survival-bygge i två lager med trappa och dubbel slab. Speltestet har körts
 lokalt på Minecraft **26.3**, Fabric Loader **0.20.1**, Java **25** och Linux med
 Mesa-mjukvarurendering. Windows, andra modpaket och inloggad multiplayer har inte
