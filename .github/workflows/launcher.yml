@@ -1,0 +1,44 @@
+name: Build Aurora Launcher
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'launcher/**'
+      - 'releases/1.10.0/aurora-client-1.10.0.jar*'
+      - '.github/workflows/launcher.yml'
+  pull_request:
+    paths:
+      - 'launcher/**'
+      - 'releases/1.10.0/aurora-client-1.10.0.jar*'
+      - '.github/workflows/launcher.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  launcher:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Install a virtual display
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth
+      - name: Build the standalone launcher
+        run: bash launcher/build.sh
+      - name: Check services, bundled mod and graphical interface
+        shell: bash
+        run: bash launcher/check.sh --no-build --gui | tee launcher/build/checks.log
+      - name: Upload launcher and verification evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aurora-launcher
+          if-no-files-found: warn
+          path: |
+            launcher/dist/*.jar
+            launcher/dist/*.sha256
+            launcher/build/checks.log
+            launcher/build/smoke/*.png

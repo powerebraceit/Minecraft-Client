@@ -3,6 +3,12 @@
 En Fabric-klient för **Minecraft Java Edition 26.3** med en mörk, animerad meny,
 lila accenter, fem modulkategorier och sökning över alla kategorier.
 
+En separat [Aurora Launcher](launcher/README.md) finns också, med ett nytt
+animerat gränssnitt och installation av Minecraft, Fabric och Aurora-modden.
+Den behöver ett registrerat Microsoft-app-ID för sin inloggning; se
+[inloggningsguiden](launcher/MICROSOFT_LOGIN.md). Mod-JAR-filen nedan kan
+fortfarande användas i din befintliga launcher.
+
 ## Ladda ner och installera
 
 1. [Ladda ner aurora-client-1.10.0.jar](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/v1.10.0/releases/1.10.0/aurora-client-1.10.0.jar).

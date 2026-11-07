@@ -1,0 +1,25 @@
+Built AuroraLauncher-1.0.0.jar (Java 17+, game runtime Java 25).
+Note: /workspace/Python-IDE/launcher/src/test/java/dev/aurora/launcher/minecraft/MinecraftInstallerCheck.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Checking dev.aurora.launcher.net.JsonCheck
+PASS: JsonCheck 52 checks
+Checking dev.aurora.launcher.service.LauncherSettingsCheck
+PASS: LauncherSettingsCheck 20 checks
+Checking dev.aurora.launcher.service.ModInstallerCheck
+PASS: 9 Aurora installer checks
+Checking dev.aurora.launcher.service.JavaRuntimeCheck
+JavaRuntime: 25 checks passed
+Checking dev.aurora.launcher.auth.AuthServiceCheck
+PASS: 50 authentication and session-store checks
+Checking dev.aurora.launcher.minecraft.MinecraftInstallerCheck
+PASS: Minecraft installer 22 checks
+Checking dev.aurora.launcher.service.GameProcessCheck
+PASS: GameProcessCheck 55 checks
+Checking the graphical interface and application entry point on DISPLAY=:100
+Checking dev.aurora.launcher.LauncherUiCheck
+PASS: Launcher UI 79 checks (real Swing/Robot; mock controller, no production authentication)
+Screenshots: launcher/build/smoke/aurora-launcher-home.png and aurora-launcher-settings.png
+Checking dev.aurora.launcher.LauncherEntryCheck
+PASS: Launcher production entry 28 checks (real controller; no network, login or game)
+Screenshot: launcher/build/smoke/aurora-launcher-entry.png
+PASS: Aurora Launcher backend, process and graphical checks completed.
