@@ -30,7 +30,7 @@ public final class InstalledGame {
         replacements.put("auth_xuid",identity.xuid());replacements.put("clientid",identity.clientId());replacements.put("user_type","msa");replacements.put("user_properties","{}");
         replacements.put("version_name",version);replacements.put("version_type",type);replacements.put("game_directory",directory.toString());
         replacements.put("assets_root",directory.resolve("assets").toString());replacements.put("assets_index_name",assetIndex);
-        replacements.put("natives_directory",natives.toString());replacements.put("launcher_name","Aurora");replacements.put("launcher_version","1.0.0");
+        replacements.put("natives_directory",natives.toString());replacements.put("launcher_name","Aurora");replacements.put("launcher_version","1.0.1");
         replacements.put("library_directory",directory.resolve("libraries").toString());replacements.put("classpath_separator",File.pathSeparator);
         replacements.put("classpath",String.join(File.pathSeparator,classpath.stream().map(Path::toString).toList()));
         var command=new ArrayList<String>();command.add(javaExecutable.toAbsolutePath().toString());command.add("-Xms512M");command.add("-Xmx"+memoryMb+"M");

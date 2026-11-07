@@ -25,6 +25,8 @@ import javax.swing.*;
 public final class LauncherUiCheck {
     private static final AtomicInteger checks = new AtomicInteger();
     private static final URI VERIFICATION_URI = URI.create("https://microsoft.com/link");
+    private static final URI AUTHORIZATION_URI = URI.create("https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize"
+        + "?client_id=ui-mock-client&state=UI-SECRET-STATE&code_challenge=UI-SECRET-CHALLENGE");
     private static AuroraWindow window;
     private static Robot robot;
 
@@ -160,6 +162,43 @@ public final class LauncherUiCheck {
             check(actions.cancelLogin.get() == 1, "Closing the device dialog requests cancellation exactly once");
             check(!edt(LauncherUiCheck::hasVisibleDeviceDialog), "Cancellation closes the real device dialog");
 
+            // Browser OAuth is presentation only here: the root controller owns browser opening and PKCE.
+            window.setBusy(true);window.showBrowserLogin(AUTHORIZATION_URI);settle();
+            check(edt(() -> browserDialog().isShowing()), "Browser-login dialog is visible");
+            check(!edt(() -> browserDialog().isModal()), "Browser login is modeless");
+            check(edt(() -> browserDialog().getTitle().equals("Logga in hos Microsoft")), "Browser sign-in uses the Microsoft title");
+            check(actions.openLogin.get() == 1, "Showing browser login does not open a browser automatically");
+            check(!edt(() -> hasTextInput(browserDialog())), "Browser sign-in contains no password or code fields");
+            check(!edt(() -> renderedText(browserDialog()).contains("UI-SECRET")), "OAuth state and challenge never appear in text or tooltips");
+            check(!edt(() -> renderedText(browserDialog()).contains(AUTHORIZATION_URI.toString())), "The full authorization URI is never rendered");
+            check(edt(() -> named(browserDialog(), "cancelBrowserLogin", JButton.class).isEnabled()), "Cancellation remains available while the controller is busy");
+            click("nav-log");
+            check(edt(() -> named("activityLog", JTextArea.class).isShowing()), "Modeless browser sign-in allows busy-state navigation");
+            click(browserDialog(), "openBrowserLoginPage");
+            check(AUTHORIZATION_URI.equals(actions.opened), "Open-again passes the exact controller-supplied authorization URI");
+            check(actions.openLogin.get() == 2, "Open-again emits one callback without opening a real browser");
+            window.closeBrowserLogin();settle();
+            check(!edt(() -> hasVisibleDialog("browserLogin")), "Programmatic completion closes browser sign-in");
+            check(actions.cancelLogin.get() == 1, "Programmatic browser close does not issue cancellation");
+
+            window.showBrowserLogin(AUTHORIZATION_URI);settle();
+            click(browserDialog(), "cancelBrowserLogin");
+            check(actions.cancelLogin.get() == 2, "Browser cancel button requests cancellation exactly once");
+            check(!edt(() -> hasVisibleDialog("browserLogin")), "Cancel button disposes the browser dialog");
+            window.showBrowserLogin(AUTHORIZATION_URI);settle();
+            edt(() -> {browserDialog().dispatchEvent(new WindowEvent(browserDialog(), WindowEvent.WINDOW_CLOSING));return null;});
+            settle();
+            check(actions.cancelLogin.get() == 3, "Closing the browser dialog requests cancellation exactly once");
+            check(!edt(() -> hasVisibleDialog("browserLogin")), "Window close disposes the browser dialog");
+
+            window.showDeviceLogin("UI-COMPLETED-CODE", VERIFICATION_URI);
+            window.showBrowserLogin(AUTHORIZATION_URI);settle();
+            window.setAccount("UiTestPlayer", true);settle();
+            check(!edt(LauncherUiCheck::hasVisibleDeviceDialog), "Successful account update closes device fallback");
+            check(!edt(() -> hasVisibleDialog("browserLogin")), "Successful account update closes browser sign-in");
+            check(actions.cancelLogin.get() == 3, "Successful account update closes both dialogs without cancellation");
+            window.setAccount("", false);window.setBusy(false);settle();
+
             edt(() -> { window.setSize(window.getMinimumSize());window.setLocation(12, 10);return null; });
             settle();
             check(edt(() -> window.getWidth() >= 960 && window.getHeight() >= 640), "Minimum window size is maintained");
@@ -171,7 +210,7 @@ public final class LauncherUiCheck {
             check(actions.launch.get() == 0, "The UI never launches a process on its own");
         } finally {
             edt(() -> {
-                if (window != null) {window.closeDeviceLogin();window.dispose();}
+                if (window != null) {window.closeDeviceLogin();window.closeBrowserLogin();window.dispose();}
                 return null;
             });
             if (robot != null) settle();
@@ -215,14 +254,41 @@ public final class LauncherUiCheck {
         check(ImageIO.write(robot.createScreenCapture(bounds), "png", target.toFile()), "PNG screenshot writer is available");
     }
     private static JDialog deviceDialog() {
+        return loginDialog("deviceLogin");
+    }
+    private static JDialog browserDialog() {
+        return loginDialog("browserLogin");
+    }
+    private static JDialog loginDialog(String name) {
         for (Window owned : window.getOwnedWindows()) {
-            if (owned instanceof JDialog dialog && "deviceLogin".equals(dialog.getName()) && dialog.isDisplayable()) return dialog;
+            if (owned instanceof JDialog dialog && name.equals(dialog.getName()) && dialog.isDisplayable()) return dialog;
         }
-        throw new AssertionError("Device-login dialog not found");
+        throw new AssertionError("Login dialog not found: " + name);
     }
     private static boolean hasVisibleDeviceDialog() {
-        for (Window owned : window.getOwnedWindows()) if ("deviceLogin".equals(owned.getName()) && owned.isShowing()) return true;
+        return hasVisibleDialog("deviceLogin");
+    }
+    private static boolean hasVisibleDialog(String name) {
+        for (Window owned : window.getOwnedWindows()) if (name.equals(owned.getName()) && owned.isShowing()) return true;
         return false;
+    }
+    private static boolean hasTextInput(Component component) {
+        if (component instanceof javax.swing.text.JTextComponent) return true;
+        if (component instanceof Container parent) {
+            for (Component child : parent.getComponents()) if (hasTextInput(child)) return true;
+        }
+        return false;
+    }
+    private static String renderedText(Component component) {
+        StringBuilder text = new StringBuilder();
+        if (component instanceof JLabel label) text.append(label.getText());
+        if (component instanceof AbstractButton button) text.append(button.getText());
+        if (component instanceof javax.swing.text.JTextComponent field) text.append(field.getText());
+        if (component instanceof JComponent swing) text.append(swing.getToolTipText());
+        if (component instanceof Container parent) {
+            for (Component child : parent.getComponents()) text.append(renderedText(child));
+        }
+        return text.toString();
     }
     private static <T extends Component> T named(String name, Class<T> type) {return named(window, name, type);}
     private static <T extends Component> T named(Container root, String name, Class<T> type) {

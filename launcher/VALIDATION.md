@@ -1,4 +1,4 @@
-# Verifiering av Aurora Launcher 1.0.0
+# Verifiering av Aurora Launcher 1.0.1
 
 Den distribuerade JAR-filen byggdes med JDK 25 och Java 17 som kompilatormål.
 Följande kommando slutfördes med exitkod 0 på Linux under Xvfb:
@@ -13,12 +13,14 @@ JAVA_HOME=/workspace/.tools/jdk-25.0.5.0.3 DISPLAY=:100 bash launcher/check.sh -
 | Inställningar | 20 | Isolerade standardmappar, sparning, laddning och felaktiga filer |
 | Aurora-installation | 9 | Medföljande mod, checksumma, backup, rollback och övriga moddar |
 | Java-runtime | 25 | Versioner, verifierad installation, avbrott och rollback med testmanifest |
-| Auth och session | 50 | Simulerad Microsoft/Xbox/Minecraft-kedja, licens, fel, refresh och fillagring |
+| Auth och session | 132 | Simulerad Microsoft/Xbox/Minecraft-kedja, kodutbyte med PKCE, licens, fel, refresh och fillagring |
+| Webbläsarinloggning | 82 | Riktig lokal HTTP-callback, state, PKCE, ogiltiga svar, avbrott, timeout och stängning |
 | Minecraft/Fabric | 22 | Installation från testmetadata, hash, regler, natives, argument och avbrott |
 | Java-process | 55 | Riktiga ofarliga JVM-processer, argument, privata filer och städning |
-| Swing-gränssnitt | 79 | Riktiga klick, navigation, sparvärden, upptagetläge, dialog och storlekar |
+| Swing-gränssnitt | 102 | Riktiga klick, navigation, sparvärden, upptagetläge, webbläsar-/koddialog och storlekar |
 | Produktionens startpunkt | 28 | Riktig controller, app-ID-spärr, sparade inställningar och stängning |
-| **Totalt** | **340** | |
+| Produktionens webbläsarflöde | 67 | Riktig controller och lokal callback med simulerade kontosvar, session, utloggning och nekad licens |
+| **Totalt** | **594** | |
 
 Auth-testet använder simulerade svar. UI-testet använder en inaktiv testcontroller;
 testet av startpunkten använder produktionscontrollern med tomt app-ID och
@@ -26,9 +28,18 @@ verifierar att inga kontoanrop, nedladdningar eller spelprocesser startas.
 Processkontrollerna startar en Java-klass som återger sina argument, aldrig spelet.
 Testklasserna ingår inte i den distribuerade JAR-filen.
 
-## Officiella metadata
+Webbläsarflödets separata integrationstest använder den riktiga controllern,
+Swing-knapparna, HTTP-callbacken och sessionsfilen. En testfunktion ersätter
+webbläsaren och skickar ett lokalt svar; alla Microsoft-, Xbox- och Minecraft-svar
+är simulerade. Det verifierar automatisk inloggning efter godkända testkontroller,
+nekad inloggning utan Java-licens och utloggning som bevarar övriga filer.
+Dess kontoskärmbild märks uttryckligen som simulerad. Det är inte en riktig
+Microsoft-inloggning eller ett test med ett registrerat Aurora-app-ID.
 
-En separat kontroll gjorde 16 riktiga HTTPS-anrop med produktens Java-transport
+## Tidigare kontroll av officiella metadata
+
+Installationsdelen kontrollerades också under launcher 1.0.0. En separat
+kontroll gjorde 16 riktiga HTTPS-anrop med produktens Java-transport
 och miljöns proxy-/CA-inställningar enbart som JVM-flaggor. Inga proxyadresser
 hårdkodades i produkten. Den verifierade Minecraft 26.3:s manifest och checksumma,
 alla sju Fabric-biblioteks SHA-256-adresser samt fem Mojang Java 25-manifest

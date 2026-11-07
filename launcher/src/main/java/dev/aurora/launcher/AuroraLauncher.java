@@ -15,6 +15,7 @@ import java.nio.file.*;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -22,7 +23,7 @@ import javax.swing.*;
 
 /** Standalone entry point. UI actions are explicit; no account or game is opened on startup. */
 public final class AuroraLauncher {
-    public static final String VERSION="1.0.0";
+    public static final String VERSION="1.0.1";
     private AuroraLauncher() { }
 
     public static void main(String[] args) {
@@ -41,7 +42,7 @@ public final class AuroraLauncher {
     }
 
     /** All network/files/process work lives off Swing's event thread. Tokens are never logged. */
-    private static final class Controller implements AuroraWindow.Actions {
+    static final class Controller implements AuroraWindow.Actions {
         private final Path configFile;
         private final TokenStore tokens;
         private final ExecutorService worker=Executors.newSingleThreadExecutor(task->{
@@ -50,7 +51,8 @@ public final class AuroraLauncher {
         });
         private final AtomicBoolean busy=new AtomicBoolean(),cancelled=new AtomicBoolean();
         private final AtomicBoolean gameRunning=new AtomicBoolean();
-        private final AuthService authentication=new AuthService();
+        private final AuthService authentication;
+        private final BrowserLogin.BrowserOpener browserOpener;
         private final ModInstaller modInstaller=new ModInstaller();
         private final MinecraftInstaller minecraft=new MinecraftInstaller();
         private final JavaRuntime runtime=new JavaRuntime();
@@ -60,6 +62,12 @@ public final class AuroraLauncher {
         private volatile String authenticatingSecret="";
 
         Controller(Path configFile) {
+            this(configFile,new AuthService(),null);
+        }
+        /** Injectable browser and protocol transport allow tests without opening a real account. */
+        Controller(Path configFile,AuthService authentication,BrowserLogin.BrowserOpener browserOpener) {
+            this.authentication=Objects.requireNonNull(authentication);
+            this.browserOpener=browserOpener==null?this::browseMicrosoft:browserOpener;
             this.configFile=configFile.toAbsolutePath().normalize();
             tokens=new TokenStore(this.configFile.getParent().resolve("account-session.json"));
             String initialNotice="";
@@ -84,7 +92,7 @@ public final class AuroraLauncher {
             if(!requireClientId())return;
             LauncherSettings selected=settings;
             submit("Loggar in med Microsoft…",()->{
-                Account result=authentication.login(selected.clientId(),code->window.showDeviceLogin(code.userCode(),code.verificationUri()),this::log,cancelled::get);
+                Account result=browserLogin(selected);
                 acceptAccount(selected,result);
             });
         }
@@ -115,7 +123,7 @@ public final class AuroraLauncher {
                         finally {authenticatingSecret="";}
                     }
                     if(current==null || current.expiresAt().isBefore(Instant.now().plusSeconds(90))) {
-                        current=authentication.login(selected.clientId(),code->window.showDeviceLogin(code.userCode(),code.verificationUri()),this::log,cancelled::get);
+                        current=browserLogin(selected);
                     }
                     acceptAccount(selected,current);
                 }
@@ -152,10 +160,16 @@ public final class AuroraLauncher {
                 window.setStatus("Minecraft har stängts. Redo att spela igen.",false);
             });
         }
+        private Account browserLogin(LauncherSettings selected) throws AuthException {
+            return BrowserLogin.login(authentication,selected.clientId(),uri->{
+                window.showBrowserLogin(uri);
+                browserOpener.open(uri);
+            },this::log,cancelled::get);
+        }
         private void acceptAccount(LauncherSettings selected,Account result) throws IOException {
             if(cancelled.get() || Thread.currentThread().isInterrupted())throw new CancellationException();
             tokens.save(selected.clientId(),result.refreshToken());
-            account=result;window.closeDeviceLogin();window.setAccount(result.name(),true);
+            account=result;window.closeDeviceLogin();window.closeBrowserLogin();window.setAccount(result.name(),true);
             window.setStatus("Inloggad som "+result.name()+".",false);
             log("Minecraft-kontot är verifierat: "+result.name());
         }
@@ -164,8 +178,9 @@ public final class AuroraLauncher {
             window.showPage("settings");
             window.setStatus("Ditt konto och launcherns app-ID är olika saker. Ange ett Microsoft-app-ID för Aurora.",true);
             JOptionPane.showMessageDialog(window,
-                "Launchern behöver ett offentligt Microsoft-app-ID för att visa sin egen inloggning.\n"
-                +"Ditt Minecraft-konto används sedan på Microsofts sida.\n\n"
+                "Aurora öppnar Microsofts inloggning i din webbläsare och kontrollerar sedan Minecraft-licensen.\n"
+                +"Microsoft kräver att utgivaren registrerar launcher-appen en gång och anger dess offentliga app-ID.\n"
+                +"Spelare använder därefter sina vanliga Minecraft-konton.\n\n"
                 +"Registrering och inställningar beskrivs i filen MICROSOFT_LOGIN.md.\n"
                 +"Ingen klienthemlighet eller något Microsoft-lösenord ska skrivas här.",
                 "Konfigurera Microsoft-inloggning",JOptionPane.INFORMATION_MESSAGE);
@@ -201,12 +216,17 @@ public final class AuroraLauncher {
             }catch(IOException error) {window.setStatus("Inställningarna kunde inte sparas.",true);}
         }
         @Override public void openLoginPage(URI uri) {
+            try {browseMicrosoft(uri);}
+            catch(Exception error) {window.setStatus("Microsofts inloggningssida kunde inte öppnas i din webbläsare.",true);}
+        }
+        private void browseMicrosoft(URI uri) throws IOException {
             String host=uri.getHost()==null?"":uri.getHost().toLowerCase(Locale.ROOT);
             if(!"https".equalsIgnoreCase(uri.getScheme()) || uri.getUserInfo()!=null || !(host.equals("microsoft.com") || host.endsWith(".microsoft.com") || host.equals("login.microsoftonline.com") || host.equals("login.live.com"))) {
-                window.setStatus("Microsofts inloggningsadress kunde inte verifieras.",true);return;
+                throw new IOException("Microsofts inloggningsadress kunde inte verifieras.");
             }
-            try {Desktop.getDesktop().browse(uri);}
-            catch(Exception error) {window.setStatus("Öppna Microsoft-adressen från inloggningsfönstret i din webbläsare.",true);}
+            if(!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE))
+                throw new IOException("Ingen webbläsare kunde öppnas för Microsoft-inloggningen.");
+            Desktop.getDesktop().browse(uri);
         }
         private void submit(String title,CheckedTask task) {
             if(!busy.compareAndSet(false,true))return;
@@ -215,15 +235,15 @@ public final class AuroraLauncher {
                 try {task.run();}
                 catch(CancellationException | InterruptedException error) {
                     if(error instanceof InterruptedException)Thread.currentThread().interrupt();
-                    window.setStatus("Åtgärden avbröts.",false);window.closeDeviceLogin();
+                    window.setStatus("Åtgärden avbröts.",false);window.closeDeviceLogin();window.closeBrowserLogin();
                 }catch(AuthException error) {
                     boolean aborted=error.code().equals("CANCELLED") || error.code().equals("ACCESS_DENIED");
-                    window.setStatus(error.getMessage(),!aborted);window.closeDeviceLogin();log(error.getMessage());
+                    window.setStatus(error.getMessage(),!aborted);window.closeDeviceLogin();window.closeBrowserLogin();log(error.getMessage());
                     if(error.code().equals("CLIENT_ID_REQUIRED") || error.code().equals("CLIENT_CONFIGURATION"))window.showPage("settings");
                 }catch(Exception error) {
                     String message=error.getMessage();
                     if(message==null || message.isBlank())message="Åtgärden kunde inte slutföras.";
-                    message=redact(message);window.setStatus(message,true);window.closeDeviceLogin();log(message);
+                    message=redact(message);window.setStatus(message,true);window.closeDeviceLogin();window.closeBrowserLogin();log(message);
                 }finally {authenticatingSecret="";busy.set(false);window.setBusy(false);}
             });
         }

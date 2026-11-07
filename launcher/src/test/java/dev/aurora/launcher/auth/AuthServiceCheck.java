@@ -3,6 +3,8 @@ package dev.aurora.launcher.auth;
 import dev.aurora.launcher.net.Json;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.*;
@@ -14,11 +16,18 @@ public final class AuthServiceCheck {
     private static final String CLIENT = "12345678-1234-1234-1234-123456789abc";
     private static final String SECRET = "SENSITIVE-TEST-ONLY";
     private static final String ID = "0123456789abcdef0123456789abcdef";
+    private static final String REDIRECT = "http://localhost:49321/";
+    private static final String VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
     private static int checks;
     public static void main(String[] args) throws Exception {
         deviceFlowHonorsPendingAndSlowDown();
         invalidClientIdDoesNotContactMicrosoft();
         refreshRotatesTokensAndSupportsRetainedRefresh();
+        browserCodeUsesPkceAndVerifiesMinecraftOwnership();
+        browserCodeValidatesInputsBeforeNetworkAccess();
+        browserCodeCancellationStopsTokenExchange();
+        browserCodeErrorsRemainFriendlyAndRedacted();
+        browserCodeRejectsUnlicensedAccountsAndMalformedTokens();
         cancellationStopsPolling();
         expiryStopsPolling();
         deniedLoginHasFriendlyRedactedError();
@@ -67,6 +76,81 @@ public final class AuthServiceCheck {
         f = new Fixture();f.add(200, Map.of("access_token", SECRET + "-microsoft"));f.addExchange(true, 200);
         account = f.service().refresh(CLIENT, "retained-refresh", message -> {}, () -> false);
         check(account.refreshToken().equals("retained-refresh"), "Retain a refresh token when Microsoft does not rotate it");f.done();
+    }
+    private static void browserCodeUsesPkceAndVerifiesMinecraftOwnership() throws Exception {
+        Fixture f = new Fixture();f.add(200, microsoft("browser-refresh"));f.addExchange(true, 200);
+        String code = SECRET + " authorization+code/&?=å";
+        List<String> statuses = new ArrayList<>();
+        Account account = f.service().authenticateAuthorizationCode(CLIENT, code, REDIRECT, VERIFIER, statuses::add, () -> false);
+        AuthService.Request request = f.requests.get(0);
+        check(request.method().equals("POST") && request.uri().equals(URI.create("https://login.microsoftonline.com/consumers/oauth2/v2.0/token")), "Browser codes use the Microsoft consumer token endpoint");
+        check(request.headers().get("Content-Type").equals("application/x-www-form-urlencoded"), "Authorization codes use a form token request");
+        check(formValues(request.body()).equals(Map.of("client_id", CLIENT, "grant_type", "authorization_code", "code", code,
+            "redirect_uri", REDIRECT, "code_verifier", VERIFIER)), "PKCE grant encodes the exact callback, code and verifier without a client secret");
+        check(!request.body().contains(code) && request.body().contains("%2B") && request.body().contains("%26"), "Reserved code characters cannot inject additional form fields");
+        check(account.name().equals("AuroraUser") && account.uuid().equals(ID) && account.xuid().equals("2533270000000001"), "Browser login derives the real licensed Minecraft identity");
+        check(account.refreshToken().equals("browser-refresh") && account.accessToken().equals(SECRET + "-minecraft"), "Browser login separates the refresh session from Minecraft access");
+        check(f.requests.size() == 6 && f.requests.get(4).uri().getPath().endsWith("/entitlements/mcstore")
+            && f.requests.get(5).uri().getPath().endsWith("/minecraft/profile"), "A browser callback completes ownership and profile verification");
+        check(statuses.stream().noneMatch(message -> message.contains(SECRET) || message.contains(VERIFIER))
+            && !request.toString().contains(VERIFIER) && !request.toString().contains(code), "Browser status and request descriptions do not reveal credentials");
+        check(f.sleeps.isEmpty(), "Authorization code flow does not poll or wait for device codes");f.done();
+    }
+    private static void browserCodeValidatesInputsBeforeNetworkAccess() throws Exception {
+        Fixture f = new Fixture();
+        expect("CLIENT_ID_REQUIRED", () -> f.service().authenticateAuthorizationCode("", "code", REDIRECT, VERIFIER, message -> {}, () -> false));
+        for (String code : Arrays.asList(null, "", "  ", "x".repeat(16_385)))
+            expect("AUTHORIZATION_CODE_INVALID", () -> f.service().authenticateAuthorizationCode(CLIENT, code, REDIRECT, VERIFIER, message -> {}, () -> false));
+        for (String verifier : Arrays.asList(null, "", "x".repeat(42), "x".repeat(129), "+".repeat(43), "/".repeat(43), "å".repeat(43), " ".repeat(43)))
+            expect("PKCE_INVALID", () -> f.service().authenticateAuthorizationCode(CLIENT, "code", REDIRECT, verifier, message -> {}, () -> false));
+        for (String redirect : Arrays.asList(null, "", "not a URI", "https://localhost:49321/", "http://localhost/",
+            "http://localhost:0/", "http://localhost:65536/", "http://example.invalid:49321/", "http://localhost@example.invalid:49321/",
+            "http://user@localhost:49321/", "http://127.0.0.1:49321/", "http://localhost:49321/callback", "http://localhost:49321//",
+            "http://localhost:49321/?code=injected", "http://localhost:49321/#fragment", "http://localhost:49321/%2F"))
+            expect("REDIRECT_URI_INVALID", () -> f.service().authenticateAuthorizationCode(CLIENT, "code", redirect, VERIFIER, message -> {}, () -> false));
+        check(f.requests.isEmpty(), "Invalid browser login inputs never contact Microsoft");
+        for (String verifier : List.of("x".repeat(43), "x".repeat(124) + "._~-")) {
+            Fixture accepted = new Fixture();accepted.add(400, Map.of("error", "access_denied"));
+            expect("ACCESS_DENIED", () -> accepted.service().authenticateAuthorizationCode(CLIENT, "code", REDIRECT, verifier, message -> {}, () -> false));
+            check(formValues(accepted.requests.get(0).body()).get("code_verifier").equals(verifier), "RFC7636 verifier boundary lengths and unreserved characters are accepted");accepted.done();
+        }
+    }
+    private static void browserCodeCancellationStopsTokenExchange() throws Exception {
+        Fixture untouched = new Fixture();
+        expect("CANCELLED", () -> untouched.service().authenticateAuthorizationCode(CLIENT, "code", REDIRECT, VERIFIER, message -> {}, () -> true));
+        check(untouched.requests.isEmpty(), "Cancelled browser login sends no code to Microsoft");
+        Fixture f = new Fixture();f.add(200, microsoft("browser-refresh"));AtomicBoolean cancelled = new AtomicBoolean();
+        AuthService service = new AuthService(request -> {
+            AuthService.Response response = f.send(request);cancelled.set(true);return response;
+        }, f.clock, duration -> {throw new AssertionError("Browser login must not wait");});
+        expect("CANCELLED", () -> service.authenticateAuthorizationCode(CLIENT, "code", REDIRECT, VERIFIER, message -> {}, cancelled::get));
+        check(f.requests.size() == 1, "Cancellation after the code response prevents the Xbox and Minecraft exchanges");f.done();
+    }
+    private static void browserCodeErrorsRemainFriendlyAndRedacted() throws Exception {
+        for (String oauthError : List.of("access_denied", "invalid_grant", "invalid_client")) {
+            Fixture f = new Fixture();f.add(400, Map.of("error", oauthError, "error_description", SECRET, "code", SECRET));
+            String expected = switch (oauthError) {
+                case "access_denied" -> "ACCESS_DENIED";
+                case "invalid_grant" -> "LOGIN_REQUIRED";
+                default -> "CLIENT_CONFIGURATION";
+            };
+            AuthException error = expect(expected, () -> f.service().authenticateAuthorizationCode(CLIENT, SECRET, REDIRECT, VERIFIER, message -> {}, () -> false));
+            check(!error.toString().contains(SECRET) && !error.getMessage().contains(VERIFIER), "Authorization code errors omit Microsoft's raw credential-bearing details");
+            if (oauthError.equals("invalid_grant")) check(!error.getMessage().contains("sparade"), "An expired browser code is not described as a saved-session error");f.done();
+        }
+    }
+    private static void browserCodeRejectsUnlicensedAccountsAndMalformedTokens() throws Exception {
+        Fixture unlicensed = new Fixture();unlicensed.add(200, microsoft("browser-refresh"));unlicensed.addExchange(false, 200);
+        expect("MINECRAFT_NOT_OWNED", () -> unlicensed.service().authenticateAuthorizationCode(CLIENT, "code", REDIRECT, VERIFIER, message -> {}, () -> false));
+        check(unlicensed.requests.stream().noneMatch(request -> request.uri().getPath().endsWith("/minecraft/profile")), "A browser login cannot bypass Minecraft ownership");unlicensed.done();
+        for (String body : List.of(SECRET, "[]", "null", "{}", "{\"access_token\":123,\"refresh_token\":\"refresh\"}")) {
+            Fixture f = new Fixture();f.responses.add(new AuthService.Response(200, body));
+            AuthException error = expect("INVALID_RESPONSE", () -> f.service().authenticateAuthorizationCode(CLIENT, "code", REDIRECT, VERIFIER, message -> {}, () -> false));
+            check(!error.toString().contains(SECRET) && f.requests.size() == 1, "Malformed browser token responses stop without leaking or continuing");f.done();
+        }
+        Fixture missingRefresh = new Fixture();missingRefresh.add(200, Map.of("access_token", SECRET));
+        expect("REFRESH_TOKEN_MISSING", () -> missingRefresh.service().authenticateAuthorizationCode(CLIENT, "code", REDIRECT, VERIFIER, message -> {}, () -> false));
+        check(missingRefresh.requests.size() == 1, "A browser login requires its own refresh session, rather than retaining a previous account's token");missingRefresh.done();
     }
     private static void cancellationStopsPolling() throws Exception {
         Fixture f = new Fixture();f.add(200, device(900, 5));AtomicBoolean cancelled = new AtomicBoolean();
@@ -142,6 +226,16 @@ public final class AuthServiceCheck {
         }
     }
     private static Map<String, Object> microsoft(String refresh) {return Map.of("access_token", SECRET + "-microsoft", "refresh_token", refresh);}
+    private static Map<String, String> formValues(String body) {
+        Map<String, String> values = new LinkedHashMap<>();
+        for (String part : body.split("&")) {
+            String[] pair = part.split("=", 2);
+            String key = URLDecoder.decode(pair[0], StandardCharsets.UTF_8);
+            String value = URLDecoder.decode(pair.length == 2 ? pair[1] : "", StandardCharsets.UTF_8);
+            if (values.put(key, value) != null)throw new AssertionError("Duplicate form key " + key);
+        }
+        return values;
+    }
     private static Map<String, Object> device(int expires, int interval) {
         return Map.of("device_code", SECRET, "user_code", "ABCD-EFGH", "verification_uri", "https://microsoft.com/link", "expires_in", expires, "interval", interval);
     }

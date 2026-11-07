@@ -74,6 +74,7 @@ public final class AuroraWindow extends JFrame {
     private final JLabel accountDetail = label("Microsoft-konto", 9, MUTED, false);
     private SoftButton loginButton, accountAction;
     private JDialog deviceDialog;
+    private JDialog browserDialog;
     private boolean loggedIn;
     private final JCheckBox closeOnLaunch = new JCheckBox("Stäng Aurora när spelet startar");
     private final List<SoftButton> serviceButtons = new ArrayList<>();
@@ -105,7 +106,8 @@ public final class AuroraWindow extends JFrame {
 
         animation = new Timer(32, event -> {
             // Keep the desktop quiet while Minecraft or the sign-in browser is in front.
-            if (!isShowing() || (!isActive() && (deviceDialog == null || !deviceDialog.isActive()))) return;
+            if (!isShowing() || (!isActive() && (deviceDialog == null || !deviceDialog.isActive())
+                    && (browserDialog == null || !browserDialog.isActive()))) return;
             phase += 0.016;
             for (SoftButton button : animatedButtons) button.advance();
             hero.repaint();
@@ -167,7 +169,53 @@ public final class AuroraWindow extends JFrame {
             if (loginButton != null) loginButton.setText(signedIn ? "Byt konto" : "Logga in med Microsoft");
             if (accountAction != null) accountAction.setText(signedIn ? "Logga ut" : "Logga in");
             if (signedIn && deviceDialog != null) { deviceDialog.dispose(); deviceDialog = null; }
+            if (signedIn && browserDialog != null) { browserDialog.dispose(); browserDialog = null; }
         });
+    }
+
+    /** Shows browser sign-in progress; only the controller opens the browser and handles OAuth data. */
+    public void showBrowserLogin(URI authorizationUri) {
+        Objects.requireNonNull(authorizationUri, "authorizationUri");
+        onEdt(() -> {
+            if (browserDialog != null) browserDialog.dispose();
+            JDialog dialog = new JDialog(this, "Logga in hos Microsoft", false);
+            browserDialog = dialog;
+            dialog.setName("browserLogin");
+            dialog.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+            boolean[] cancelled = {false};
+            Runnable cancel = () -> {
+                if (cancelled[0] || !dialog.isDisplayable()) return;
+                cancelled[0] = true;
+                dialog.dispose();
+                if (browserDialog == dialog) browserDialog = null;
+                actions.cancelLogin();
+            };
+            dialog.addWindowListener(new WindowAdapter() {
+                @Override public void windowClosing(WindowEvent event) { cancel.run(); }
+            });
+            JPanel content = new JPanel();content.setBackground(BASE);
+            content.setBorder(new EmptyBorder(28, 30, 28, 30));
+            content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+            content.add(label("Logga in hos Microsoft", 23, TEXT, true));gap(content, 14);
+            content.add(label("<html>Microsofts inloggning öppnas i din webbläsare.<br>"
+                + "Aurora fortsätter automatiskt när kontot är verifierat.</html>", 12, MUTED, false));
+            gap(content, 18);
+            // OAuth query parameters stay inside the controller callback; never render them as text or tooltips.
+            content.add(label("Microsoft", 11, CYAN, true));gap(content, 22);
+            JPanel controls = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0));
+            SoftButton open = button("Öppna Microsoft igen", true, "openBrowserLoginPage",
+                () -> actions.openLoginPage(authorizationUri));
+            SoftButton abort = button("Avbryt", false, "cancelBrowserLogin", cancel);
+            controls.add(open);controls.add(abort);controls.setAlignmentX(Component.LEFT_ALIGNMENT);
+            content.add(controls);
+            dialog.setContentPane(content);dialog.setMinimumSize(new Dimension(560, 265));
+            dialog.pack();dialog.setLocationRelativeTo(this);dialog.setVisible(true);
+        });
+    }
+
+    /** Completing or failing authentication closes presentation without issuing another cancellation. */
+    public void closeBrowserLogin() {
+        onEdt(() -> {if(browserDialog!=null){browserDialog.dispose();browserDialog=null;}});
     }
 
     /** The controller supplies Microsoft's real device code and verification URI. No login is simulated. */
@@ -262,7 +310,7 @@ public final class AuroraWindow extends JFrame {
         accountAction = button("Logga in", false, "accountAction", () -> {if (loggedIn) actions.logout();else actions.login();});
         accountAction.setAlignmentX(Component.LEFT_ALIGNMENT);serviceButtons.add(accountAction);account.add(accountAction);
         footer.add(account);gap(footer, 17);
-        JLabel version = label("Aurora Launcher 1.0.0", 10, new Color(103, 119, 148), false);
+        JLabel version = label("Aurora Launcher 1.0.1", 10, new Color(103, 119, 148), false);
         version.setBorder(new EmptyBorder(0, 5, 0, 0));footer.add(version);
         sidebar.add(footer, BorderLayout.SOUTH);
         return sidebar;

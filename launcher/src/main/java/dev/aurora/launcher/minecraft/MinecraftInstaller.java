@@ -244,7 +244,7 @@ public final class MinecraftInstaller {
             if(!"https".equalsIgnoreCase(uri.getScheme()))throw new IOException("Spelfiler kräver HTTPS");
             check(cancelled);
             try {
-                var response=client.send(HttpRequest.newBuilder(uri).timeout(Duration.ofMinutes(3)).header("User-Agent","AuroraLauncher/1.0.0").GET().build(),HttpResponse.BodyHandlers.ofInputStream());
+                var response=client.send(HttpRequest.newBuilder(uri).timeout(Duration.ofMinutes(3)).header("User-Agent","AuroraLauncher/1.0.1").GET().build(),HttpResponse.BodyHandlers.ofInputStream());
                 if(response.statusCode()!=200){response.body().close();throw new IOException("Spelfilen kunde inte hämtas (HTTP "+response.statusCode()+")");}
                 try(InputStream in=response.body();var out=new ByteArrayOutputStream()) {
                     byte[] buffer=new byte[65536];for(int count;(count=in.read(buffer))!=-1;){check(cancelled);if(out.size()+count>maximum)throw new IOException("Spelfilen är för stor");out.write(buffer,0,count);}return out.toByteArray();

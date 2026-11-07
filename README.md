@@ -5,6 +5,8 @@ lila accenter, fem modulkategorier och sökning över alla kategorier.
 
 En separat [Aurora Launcher](launcher/README.md) finns också, med ett nytt
 animerat gränssnitt och installation av Minecraft, Fabric och Aurora-modden.
+Version 1.0.1 öppnar Microsoft-inloggningen i webbläsaren och tar emot svaret
+automatiskt, utan engångskod.
 Den behöver ett registrerat Microsoft-app-ID för sin inloggning; se
 [inloggningsguiden](launcher/MICROSOFT_LOGIN.md). Mod-JAR-filen nedan kan
 fortfarande användas i din befintliga launcher.

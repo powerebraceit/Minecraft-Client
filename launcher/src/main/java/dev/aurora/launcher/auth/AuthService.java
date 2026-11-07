@@ -16,7 +16,8 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
- * Public-client OAuth device flow followed by the official Xbox/Minecraft token exchange.
+ * Public-client OAuth browser/PKCE and device flows, followed by the official
+ * Xbox/Minecraft token exchange.
  * No password or client secret is collected. Each launcher publisher supplies their own
  * Microsoft application ID; possessing a Microsoft account is not an application registration.
  */
@@ -116,6 +117,35 @@ public final class AuthService {
         return exchange(token, refreshToken, status, cancelled);
     }
 
+    /**
+     * Redeems a browser callback code using the verifier belonging to that same
+     * authorization attempt. The caller checks the callback's OAuth state before
+     * calling this method. Codes, verifiers and token responses must never be logged.
+     */
+    public Account authenticateAuthorizationCode(String clientId, String code, String redirectUri,
+                                                 String codeVerifier, Consumer<String> status,
+                                                 BooleanSupplier cancelled) throws AuthException {
+        validateClientId(clientId);
+        Objects.requireNonNull(status); Objects.requireNonNull(cancelled);
+        if (code == null || code.isBlank() || code.length() > 16_384)
+            throw new AuthException("AUTHORIZATION_CODE_INVALID", "Microsoft gav ingen giltig inloggningskod. Börja inloggningen igen.");
+        if (codeVerifier == null || !codeVerifier.matches("[A-Za-z0-9._~-]{43,128}"))
+            throw new AuthException("PKCE_INVALID", "Inloggningens säkerhetsverifiering saknas eller är ogiltig. Börja inloggningen igen.");
+        validateLoopbackRedirect(redirectUri);
+        checkCancelled(cancelled);
+        status.accept("Slutför Microsoft-inloggningen…");
+        Response response = send(form(TOKEN, Map.of("client_id", clientId, "grant_type", "authorization_code",
+            "code", code, "redirect_uri", redirectUri, "code_verifier", codeVerifier)), cancelled);
+        Map<String, Object> token = data(response);
+        if (!success(response)) {
+            AuthException error = oauthError(token);
+            if (error.code().equals("LOGIN_REQUIRED"))
+                throw new AuthException("LOGIN_REQUIRED", "Microsoft-inloggningen har gått ut eller kan inte användas. Logga in igen.");
+            throw error;
+        }
+        return exchange(token, null, status, cancelled);
+    }
+
     private Account exchange(Map<String, Object> microsoft, String oldRefresh, Consumer<String> status,
                              BooleanSupplier cancelled) throws AuthException {
         try { return exchangeAccount(microsoft, oldRefresh, status, cancelled); }
@@ -208,6 +238,19 @@ public final class AuthService {
             || clientId.equals("00000000-0000-0000-0000-000000000000"))
             throw new AuthException("CLIENT_ID_REQUIRED", "Ange launcherns offentliga Microsoft Application (client) ID i Inställningar. Ditt Minecraft-konto är inte ett app-ID.");
     }
+    /** BrowserLogin binds a local listener and registers only its root callback. */
+    private static void validateLoopbackRedirect(String value) throws AuthException {
+        try {
+            URI uri = value == null ? null : URI.create(value);
+            if (uri == null || !"http".equalsIgnoreCase(uri.getScheme())
+                || !"localhost".equalsIgnoreCase(uri.getHost()) || uri.getPort() < 1 || uri.getPort() > 65_535
+                || !"/".equals(uri.getRawPath()) || uri.getRawUserInfo() != null
+                || uri.getRawQuery() != null || uri.getRawFragment() != null)
+                throw new IllegalArgumentException("Invalid loopback callback");
+        } catch (IllegalArgumentException invalid) {
+            throw new AuthException("REDIRECT_URI_INVALID", "Inloggningens lokala returadress är ogiltig. Börja inloggningen igen.");
+        }
+    }
     private static URI verificationUri(String value) throws AuthException {
         try {
             URI uri = URI.create(value);
@@ -230,7 +273,7 @@ public final class AuthService {
             case "access_denied", "authorization_declined" -> new AuthException("ACCESS_DENIED", "Du avbröt eller nekade Microsoft-inloggningen.");
             case "expired_token", "bad_verification_code" -> new AuthException("DEVICE_CODE_EXPIRED", "Inloggningskoden är inte längre giltig. Logga in igen.");
             case "invalid_grant", "interaction_required" -> new AuthException("LOGIN_REQUIRED", "Din sparade Microsoft-session har gått ut. Logga in igen.");
-            case "invalid_client", "unauthorized_client", "invalid_request" -> new AuthException("CLIENT_CONFIGURATION", "Microsoft godkände inte launcher-appens konfiguration. Kontrollera app-ID, personliga Microsoft-konton och att public client/device-code-flödet är aktiverat.");
+            case "invalid_client", "unauthorized_client", "invalid_request" -> new AuthException("CLIENT_CONFIGURATION", "Microsoft godkände inte launcher-appens konfiguration. Kontrollera app-ID, personliga Microsoft-konton, public client och returadressen http://localhost för webbläsarinloggning.");
             default -> new AuthException("MICROSOFT_AUTH", "Microsoft-inloggningen misslyckades. Kontrollera appens behörigheter och försök igen.");
         };
     }

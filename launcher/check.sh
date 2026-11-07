@@ -54,8 +54,10 @@ mkdir -p "$test_classes" "$launcher_root/build/smoke"
 find "$test_classes" -type f -delete
 find "$launcher_root/build/smoke" -maxdepth 1 -name 'aurora-launcher-*.png' -type f -delete
 for required_test in \
+  auth/BrowserLoginCheck.java \
   service/GameProcessCheck.java \
   LauncherUiCheck.java \
+  LauncherBrowserEntryCheck.java \
   LauncherEntryCheck.java; do
   if [[ ! -f "$launcher_root/src/test/java/dev/aurora/launcher/$required_test" ]]; then
     echo "Required launcher check source is missing: $required_test" >&2
@@ -86,10 +88,11 @@ run_check dev.aurora.launcher.service.LauncherSettingsCheck
 run_check dev.aurora.launcher.service.ModInstallerCheck --bundled
 run_check dev.aurora.launcher.service.JavaRuntimeCheck
 run_check dev.aurora.launcher.auth.AuthServiceCheck
+run_check dev.aurora.launcher.auth.BrowserLoginCheck
 run_check dev.aurora.launcher.minecraft.MinecraftInstallerCheck
 run_check dev.aurora.launcher.service.GameProcessCheck
 
-gui_checks=(dev.aurora.launcher.LauncherUiCheck dev.aurora.launcher.LauncherEntryCheck)
+gui_checks=(dev.aurora.launcher.LauncherUiCheck dev.aurora.launcher.LauncherEntryCheck dev.aurora.launcher.LauncherBrowserEntryCheck)
 run_gui_checks() {
   for main_class in "${gui_checks[@]}"; do
     echo "Checking $main_class"

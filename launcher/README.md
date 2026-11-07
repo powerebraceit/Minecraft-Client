@@ -1,4 +1,4 @@
-# Aurora Launcher 1.0.0
+# Aurora Launcher 1.0.1
 
 **Förhandsversion:** utgivarens Microsoft-appregistrering återstår att konfigurera.
 
@@ -7,8 +7,8 @@ lila och cyan. Installerar **Minecraft Java 26.3**, **Fabric Loader 0.20.1**,
 **Java 25** vid behov och den medföljande **Aurora-modden 1.10.0** i en egen
 instans. Ingen separat Dawn- eller Prism-installation behövs.
 
-[Ladda ner Windows-paketet (ZIP)](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/launcher-v1.0.0/releases/launcher-1.0.0/AuroraLauncher-1.0.0.zip)
-eller [bara launcher-JAR:en](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/launcher-v1.0.0/releases/launcher-1.0.0/AuroraLauncher-1.0.0.jar).
+[Ladda ner Windows-paketet (ZIP)](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/launcher-v1.0.1/releases/launcher-1.0.1/AuroraLauncher-1.0.1.zip)
+eller [bara launcher-JAR:en](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/launcher-v1.0.1/releases/launcher-1.0.1/AuroraLauncher-1.0.1.jar).
 Läs app-ID-kravet nedan före installation.
 
 ![Aurora Launcher](../docs/aurora-launcher-home.png)
@@ -17,15 +17,17 @@ Läs app-ID-kravet nedan före installation.
 
 1. Installera **Java 17 eller senare** för att öppna launchern, om det saknas.
    Java 25 för själva spelet ordnas automatiskt när du startar en installation.
-2. Öppna `AuroraLauncher-1.0.0.jar`, eller kör
-   `java -jar AuroraLauncher-1.0.0.jar`. Windows-paketet innehåller också
+2. Öppna `AuroraLauncher-1.0.1.jar`, eller kör
+   `java -jar AuroraLauncher-1.0.1.jar`. Windows-paketet innehåller också
    `Starta Aurora.bat` som visar startfel i ett konsolfönster.
 3. I **Inställningar** anger utgivaren sitt offentliga **Microsoft-app-ID**.
    Den här versionen innehåller ännu inget registrerat ID. Ett eget
    Minecraft-konto ersätter inte appregistreringen. Se
    [MICROSOFT_LOGIN.md](MICROSOFT_LOGIN.md).
-4. Klicka **Logga in med Microsoft**. Öppna Microsoft-adressen, ange koden
-   från launchern och använd ett konto med tillgång till Minecraft Java.
+4. Klicka **Logga in med Microsoft**. Microsofts inloggning öppnas automatiskt
+   i din webbläsare. Logga in med kontot som har Minecraft Java. Aurora tar
+   emot inloggningen automatiskt och kontrollerar spellicensen och profilen.
+   Du behöver inte kopiera någon engångskod.
 5. Klicka **Installera & spela**. Första installationen laddar ner spelet,
    bibliotek, resurser och eventuellt Java. Följ förloppet i **Aktivitet**.
 
@@ -36,8 +38,11 @@ ett valfritt GUID räcker inte.
 
 ## Funktioner
 
-- Microsofts device-code-inloggning i webbläsaren, förnyelse av sessioner,
-  verifiering av spellicens och Minecraft-profil samt utloggning.
+- Microsoft-inloggning i webbläsaren med automatisk återgång till Aurora,
+  förnyelse av sessioner, verifiering av spellicens och Minecraft-profil samt
+  utloggning. Kontot visas som inloggat först efter godkänd spelkontroll.
+  Utgivaren konfigurerar app-ID och omdirigeringsadressen `http://localhost`
+  en gång enligt [inloggningsguiden](MICROSOFT_LOGIN.md).
 - Val av separat spelmapp, automatisk eller vald Java, minne och stängning
   av launcherfönstret när spelet startar. Spelet fortsätter köras.
 - Hashkontroller av spel-, biblioteks-, resurs- och Java-filer, tillfälliga
@@ -82,15 +87,15 @@ Modfilen i `releases/1.10.0/` måste finnas i checkouten.
 ```bash
 bash launcher/build.sh
 bash launcher/check.sh --gui
-java -jar launcher/dist/AuroraLauncher-1.0.0.jar --version
-java -jar launcher/dist/AuroraLauncher-1.0.0.jar
+java -jar launcher/dist/AuroraLauncher-1.0.1.jar --version
+java -jar launcher/dist/AuroraLauncher-1.0.1.jar
 ```
 
 JAR och källkods-JAR hamnar i `launcher/dist/`. Kontrollerna använder isolerade
 filer, simulerade auth-/installationssvar och en ofarlig Java-process.
 GUI-kontrollen kör riktiga Swing-komponenter och musinteraktion i en grafisk
 session; på Linux kan `xvfb-run` användas. GitHub Actions kör samma kontroller.
-De [340 lokala kontrollerna och testgränserna](VALIDATION.md) dokumenteras separat.
+De [lokala kontrollerna och testgränserna](VALIDATION.md) dokumenteras separat.
 
 Officiella 26.3-/Fabric-metadata och Java 25-manifest har dessutom kontrollerats
 mot servrarna. **Riktig kontoinloggning och en spelstart genom denna nya launcher
