@@ -7,8 +7,8 @@ lila och cyan. Installerar **Minecraft Java 26.3**, **Fabric Loader 0.20.1**,
 **Java 25** vid behov och den medföljande **Aurora-modden 1.10.0** i en egen
 instans. Ingen separat Dawn- eller Prism-installation behövs.
 
-[Ladda ner Windows-paketet (ZIP)](https://github.com/powerebraceit/Minecraft-Client/releases/download/launcher-v1.0.0/AuroraLauncher-1.0.0.zip)
-eller [bara launcher-JAR:en](https://github.com/powerebraceit/Minecraft-Client/releases/download/launcher-v1.0.0/AuroraLauncher-1.0.0.jar).
+[Ladda ner Windows-paketet (ZIP)](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/launcher-v1.0.0/releases/launcher-1.0.0/AuroraLauncher-1.0.0.zip)
+eller [bara launcher-JAR:en](https://raw.githubusercontent.com/powerebraceit/Minecraft-Client/launcher-v1.0.0/releases/launcher-1.0.0/AuroraLauncher-1.0.0.jar).
 Läs app-ID-kravet nedan före installation.
 
 ![Aurora Launcher](../docs/aurora-launcher-home.png)
